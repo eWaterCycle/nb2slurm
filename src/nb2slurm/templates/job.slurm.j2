@@ -10,6 +10,7 @@
 # The varying values arrive as environment variables (see --export in submit).
 
 set -e
+export NB2SLURM=1   # lets notebooks detect batch execution via nb2slurm.on_hpc()
 {% for line in setup %}
 {{ line }}
 {% endfor %}

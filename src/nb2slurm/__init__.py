@@ -30,7 +30,8 @@ from .settings import Settings
 from .done import Done
 from .structure import Structure
 from .config import save_config, load_config
+from .runtime import on_hpc
 
 __all__ = ["Workflow", "Environment", "SSHConfig", "Settings", "Done",
-           "Structure", "save_config", "load_config"]
+           "Structure", "save_config", "load_config", "on_hpc"]
 __version__ = "0.1.0"

@@ -155,10 +155,20 @@ flattens `jobs.json` into `jobs.txt` for them, so they stay short and readable.
 This keeps per-run details in one place (`settings.json`) and means only the first
 notebook is parameterised.
 
+For paths that genuinely differ between your laptop and the cluster (shared data
+dirs, etc.), branch on `nb2slurm.on_hpc()` — it detects a batch run via the SLURM
+environment (and an `NB2SLURM` sentinel), so it works for any user, unlike
+grepping `Path.home()`:
+
+```python
+import nb2slurm
+data_dir = "/project/ewater/Data" if nb2slurm.on_hpc() else "/data/shared"
+```
+
 **Converting an existing local-only workflow?** See
 [`docs/setup_notebooks.ipynb`](docs/setup_notebooks.ipynb) — a step-by-step guide
-(with before/after snippets) covering the five changes that make your notebooks
-run both locally and on SLURM.
+(with before/after snippets) covering the seven in-notebook changes that make your
+notebooks run both locally and on SLURM.
 
 ## jobs.json — one file defines the jobs *and* the output tree
 

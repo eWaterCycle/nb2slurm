@@ -53,6 +53,29 @@ def test_runner_template_contents(tmp_path):
     assert "python scripts/run_workflow.py $ITEM_ID" in slurm
 
 
+def test_on_hpc_detects_batch_env(monkeypatch):
+    from nb2slurm import on_hpc
+    for var in ("NB2SLURM", "SLURM_JOB_ID", "SLURM_JOBID"):
+        monkeypatch.delenv(var, raising=False)
+    assert on_hpc() is False
+    monkeypatch.setenv("SLURM_JOB_ID", "12345")
+    assert on_hpc() is True
+
+
+def test_on_hpc_nb2slurm_sentinel(monkeypatch):
+    from nb2slurm import on_hpc
+    for var in ("NB2SLURM", "SLURM_JOB_ID", "SLURM_JOBID"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("NB2SLURM", "1")
+    assert on_hpc() is True
+
+
+def test_slurm_script_exports_sentinel(tmp_path):
+    wf = make_wf(tmp_path)
+    wf.build()
+    assert "export NB2SLURM=1" in wf.slurm_path.read_text()
+
+
 def test_no_environment_no_conda_activate(tmp_path):
     # cluster provides its own Python: no environment, no conda_env
     wf = make_wf(tmp_path, kernel="cluster_kernel")
