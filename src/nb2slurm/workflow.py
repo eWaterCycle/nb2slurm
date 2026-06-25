@@ -18,8 +18,8 @@ from .render import write_rendered
 from .ssh import CommandResult, SSHConfig, run_shell
 from .structure import Structure
 
-# uploaded by push, but never the other way: these are outputs or local cruft
-PUSH_EXCLUDES = [".git", "__pycache__", ".ipynb_checkpoints", "runs", "done"]
+# local cruft never worth uploading (the output dirs are excluded dynamically in push)
+PUSH_EXCLUDES = [".git", "__pycache__", ".ipynb_checkpoints"]
 
 Item = Union[Any, Sequence[Any], Mapping[str, Any]]
 
@@ -37,7 +37,7 @@ class Workflow:
     mounts: list[dict] = field(default_factory=list)
     runner_name: str = "run_workflow.py"
     concurrency: int = 3
-    output_dir: str = "runs"          # root for per-subject outputs (relative to project root)
+    output_dir: str = "output"        # root for per-subject outputs (relative to project root)
     done_csv: str = "done/done.csv"   # idempotency ledger (relative to project root)
     jobs_json: str = "jobs.json"      # nested JSON describing the jobs to run (one leaf path = one job)
     environment: Optional[Environment] = None  # conda env + kernel to run in
@@ -335,21 +335,25 @@ class Workflow:
         """Upload the project to the cluster (source only — never outputs).
 
         Syncs notebooks/, scripts/, jobs.json, environment.yml, ... up to
-        ``remote_dir``. ``runs/`` and ``done/`` are excluded, so pushing your
-        latest notebook edits can never wipe results already on the cluster.
+        ``remote_dir``. The output dir (``output/`` by default) and ``done/`` are
+        excluded, so pushing your latest notebook edits can never wipe results
+        already on the cluster.
         """
+        done_dir = str(Path(self.done_csv).parent).replace("\\", "/").rstrip("/")
+        excludes = list(PUSH_EXCLUDES) + [self.output_dir.rstrip("/"), done_dir]
         return self._rsync(
             src=str(self._project).rstrip("/\\") + "/",
             dst=ssh.rsync_target(),
-            ssh=ssh, excludes=PUSH_EXCLUDES, delete=delete, dry_run=dry_run,
+            ssh=ssh, excludes=excludes, delete=delete, dry_run=dry_run,
         )
 
     def pull(self, ssh: SSHConfig, delete: bool = False, dry_run: bool = False):
         """Download results from the cluster (outputs only).
 
-        Pulls **only** ``runs/`` and the ``done/`` ledger back to the project.
-        It never fetches notebooks/ or scripts/, so a results-sync can't
-        overwrite a notebook you changed locally while jobs were running.
+        Pulls **only** the output dir (``output/`` by default) and the ``done/``
+        ledger back to the project. It never fetches notebooks/ or scripts/, so a
+        results-sync can't overwrite a notebook you changed locally while jobs
+        were running.
         """
         done_dir = str(Path(self.done_csv).parent).replace("\\", "/")
         results = []

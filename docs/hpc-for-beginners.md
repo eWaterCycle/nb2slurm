@@ -2,8 +2,10 @@
 
 If you have only ever run notebooks on your laptop or a cloud server, an HPC
 ("supercomputer") works a little differently. This page explains just enough to
-use nb2slurm. You will **not** need to learn Linux or the command line — nb2slurm
+use nb2slurm. The idea is that you will **not** need to learn Linux or the command line — nb2slurm
 does that for you — but it helps to know what is happening underneath.
+These docs give you the most common Linux and SLURM commands.
+Yet, I cannot promise that you can omit commandline.
 
 ## The one-sentence summary
 
@@ -33,13 +35,13 @@ hours"* and it queues it. When resources are free, it runs. Key ideas:
 ### Resources
 Every job declares what it needs. The common ones (set via `Workflow(resources=...)`):
 
-| field | meaning | typical |
-|-------|---------|---------|
-| `nodes` | how many machines | `1` |
-| `cpus` | CPU cores | `1`–`8` |
-| `time` | wall-clock limit `HH:MM:SS`; job is killed if exceeded | start generous |
-| `memory` | RAM, e.g. `"16G"` (optional) | depends on data |
-| `partition` | which queue to use, cluster-specific (optional) | ask your cluster |
+| field | meaning | typical               |
+|-------|---------|-----------------------|
+| `nodes` | how many machines | `1`                   |
+| `cpus` | CPU cores | `1`–`8`               |
+| `time` | wall-clock limit `HH:MM:SS`; job is killed if exceeded | start generous        |
+| `memory` | RAM, e.g. `"16G"` (optional) | depends on data       |
+| `partition` | which queue to use, cluster-specific (optional) | consult documentation |
 
 Ask for too little time and your job is killed mid-run; too much and it waits
 longer in the queue. Start generous, then tighten once you know how long one
@@ -71,7 +73,7 @@ HPCs have more than one place to store files, and they behave differently:
 
 - **Home** (`$HOME`) — small, backed up. Keep code/notebooks here.
 - **Project / scratch** — large, fast, often **not** backed up and sometimes
-  auto-deleted after a while. Keep big outputs and data here.
+  auto-deleted after a while. Keep big outputs and data here. But keep in mind that it might be deleted!
 
 This is why `output_dir` and `done_csv` are configurable in nb2slurm: point big
 outputs at scratch/project, keep your notebooks in home.
@@ -95,7 +97,7 @@ Collect these (usually from your HPC's docs or support desk):
 2. **SSH access** — ideally an SSH key (so nb2slurm can connect without a password
    prompt). Your cluster's docs explain how to upload your public key.
 3. The **login hostname** (e.g. `spider.surf.nl`).
-4. A **project directory** on the cluster to hold your notebooks (`remote_dir`).
+4. A **project directory** on the cluster to hold your notebooks (`remote_dir`). (Optional, but nice to have)
 5. Which **partition** (queue) to use, if any, and sensible resource limits.
 6. How to reach your **data** (rclone remote names / mountpoints), if needed.
 

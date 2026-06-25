@@ -86,7 +86,7 @@ def test_submit_dry_run_multikey(tmp_path, capsys):
     wf.submit([("123", "NL"), ("456", "DE"), ("789", "FR")], dry_run=True)
     out = capsys.readouterr().out
     assert "--job-name=123_NL" in out
-    assert "runs/456/DE/456_DE.out" in out
+    assert "output/456/DE/456_DE.out" in out
     assert "REGION_ID=789,COUNTRY=FR" in out
     # 3rd job (index 2) chains on job 0 (concurrency=2)
     assert "--dependency=afterany:" in out
@@ -96,10 +96,10 @@ def test_output_paths_default_to_root(tmp_path, capsys):
     wf = make_wf(tmp_path)
     wf.build()
     runner = wf.runner_path.read_text()
-    assert 'Path("runs", *values.values())' in runner
+    assert 'Path("output", *values.values())' in runner
     assert 'Done("done/done.csv")' in runner
     wf.submit([5], dry_run=True)
-    assert "runs/5/5.out" in capsys.readouterr().out
+    assert "output/5/5.out" in capsys.readouterr().out
 
 
 def test_output_paths_configurable(tmp_path, capsys):
@@ -237,7 +237,7 @@ def test_submit_reads_jobs_json_by_default(tmp_path, capsys):
     wf.submit(dry_run=True)                          # no items -> reads jobs.json
     out = capsys.readouterr().out
     assert "--job-name=NL_123_ssp126" in out
-    assert "runs/DE/789/ssp585/DE_789_ssp585.out" in out
+    assert "output/DE/789/ssp585/DE_789_ssp585.out" in out
     assert "COUNTRY=NL,REGION=123,SCENARIO=ssp126" in out
 
 
@@ -275,8 +275,8 @@ def test_build_outputs_from_json(tmp_path):
     wf = make_wf(tmp_path, varying=["country", "region", "scenario"])
     (tmp_path / "jobs.json").write_text(json.dumps(SPEC))
     paths = wf.build_outputs()
-    assert (tmp_path / "runs" / "NL" / "123" / "ssp126").is_dir()
-    assert (tmp_path / "runs" / "DE" / "789" / "ssp585").is_dir()
+    assert (tmp_path / "output" / "NL" / "123" / "ssp126").is_dir()
+    assert (tmp_path / "output" / "DE" / "789" / "ssp585").is_dir()
     assert set(paths) == {"NL/123/ssp126", "NL/123/ssp245", "DE/789/ssp585"}
 
 
@@ -292,7 +292,7 @@ def test_push_uploads_source_not_outputs(tmp_path):
     assert cmd[0] == "rsync"
     assert "ssh -i ~/.ssh/id_ed25519" in cmd        # -e transport
     # outputs are excluded so push can't wipe remote results
-    for ex in ("runs", "done", ".git"):
+    for ex in ("output", "done", ".git"):
         assert ex in cmd
     assert cmd[-1] == "me@hpc:/home/me/proj/"        # dst is the remote project root
     assert cmd[-2].endswith("/")                      # src is the local project
@@ -306,8 +306,8 @@ def test_pull_fetches_only_outputs(tmp_path):
     assert "notebooks" not in flat
     assert "scripts" not in flat
     assert "jobs.json" not in flat
-    # it does fetch runs/ and done/
-    assert "me@hpc:/home/me/proj/runs/" in flat
+    # it does fetch output/ and done/
+    assert "me@hpc:/home/me/proj/output/" in flat
     assert "me@hpc:/home/me/proj/done/" in flat
 
 
@@ -354,7 +354,7 @@ def test_done_roundtrip(tmp_path):
 
 
 def test_settings_roundtrip(tmp_path):
-    outdir = tmp_path / "runs" / "123"
+    outdir = tmp_path / "output" / "123"
     path = Settings.write(outdir, {"region_id": "123", "outdir": str(outdir)})
     assert path == outdir / "settings.json"
     loaded = Settings.load(path)

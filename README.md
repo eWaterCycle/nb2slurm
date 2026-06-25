@@ -49,7 +49,7 @@ wf = nb2slurm.Workflow(
         {"remote": "dcache:/climate-data/caravan", "mountpoint": "/scratch/caravan"},
     ],
     concurrency=3,                      # max jobs running at once per submit
-    # output_dir="runs",              # where per-subject outputs go (root-relative by default)
+    # output_dir="output",            # where per-subject outputs go (root-relative by default)
     # done_csv="done/done.csv",       # idempotency ledger (root-relative by default)
 )
 
@@ -155,6 +155,11 @@ flattens `jobs.json` into `jobs.txt` for them, so they stay short and readable.
 This keeps per-run details in one place (`settings.json`) and means only the first
 notebook is parameterised.
 
+**Converting an existing local-only workflow?** See
+[`docs/setup_notebooks.ipynb`](docs/setup_notebooks.ipynb) — a step-by-step guide
+(with before/after snippets) covering the five changes that make your notebooks
+run both locally and on SLURM.
+
 ## jobs.json — one file defines the jobs *and* the output tree
 
 Instead of a flat subject list, the jobs to run live in a nested JSON file. Each
@@ -173,7 +178,7 @@ With `varying=["country", "region", "scenario"]` this means:
 
 ```
 jobs:  (NL,123,ssp126)  (NL,123,ssp245)  (DE,789,ssp585)
-dirs:  runs/NL/123/ssp126  runs/NL/123/ssp245  runs/DE/789/ssp585
+dirs:  output/NL/123/ssp126  output/NL/123/ssp245  output/DE/789/ssp585
 ```
 
 **Format rules** (so you can generate the file however you like — a literal dict,
@@ -199,7 +204,7 @@ json.dump(jobs, open("jobs.json", "w"), indent=2)
 ```python
 wf = nb2slurm.Workflow(..., varying=["country","region","scenario"], jobs_json="jobs.json")
 
-wf.build_outputs()                  # optional: pre-create the whole runs/... tree from the JSON
+wf.build_outputs()                  # optional: pre-create the whole output/... tree from the JSON
 wf.submit(ssh=cfg)                  # reads jobs.json, one job per leaf path
 wf.submit([("NL","123","ssp126")], ssh=cfg)   # override: run an explicit subset instead
 wf.submit(ssh=cfg, jobs_json="rerun.json")    # override: use a different file
@@ -217,12 +222,12 @@ deliberately one-directional helpers:
 
 ```python
 wf.push(ssh=cfg)   # local project  -> cluster:  notebooks/, scripts/, jobs.json, ...
-wf.pull(ssh=cfg)   # cluster results -> local:    runs/ and done/ only
+wf.pull(ssh=cfg)   # cluster results -> local:    output/ and done/ only
 ```
 
 The split is the safety mechanism:
 
-- **`push` never uploads `runs/`/`done/`** — re-uploading your latest notebook
+- **`push` never uploads `output/`/`done/`** — re-uploading your latest notebook
   edits can't wipe results already produced on the cluster.
 - **`pull` never fetches `notebooks/`/`scripts/`/`jobs.json`** — syncing results
   back can't overwrite a notebook you changed locally while jobs were running.

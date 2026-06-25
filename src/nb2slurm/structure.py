@@ -16,7 +16,7 @@ same parent path; ``None``/``[]``/``{}`` means the path ends there.
     struct.jobs()
     # [("NL", "123", "ssp126"), ("NL", "123", "ssp245"), ("DE", "789", "ssp585")]
 
-    struct.build("runs")                        # creates runs/NL/123/ssp126, ... and returns paths
+    struct.build("output")                      # creates output/NL/123/ssp126, ... and returns paths
 
 The same file is read by ``Workflow.submit`` to decide which jobs to launch, so
 the directory tree and the job list can never drift apart.
