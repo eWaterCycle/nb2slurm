@@ -33,7 +33,12 @@ def _workflow_from_dict(d: dict) -> Workflow:
     d = dict(d)
     d.pop("submitted_jobs", None)
     env = d.pop("environment", None)
-    return Workflow(**d, environment=Environment(**env) if env else None)
+    extras = d.pop("extra_environments", None) or []
+    return Workflow(
+        **d,
+        environment=Environment(**env) if env else None,
+        extra_environments=[Environment(**e) for e in extras],
+    )
 
 
 def _ssh_to_dict(ssh: SSHConfig) -> dict:

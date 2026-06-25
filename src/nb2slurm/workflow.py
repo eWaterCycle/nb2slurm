@@ -40,7 +40,9 @@ class Workflow:
     output_dir: str = "output"        # root for per-subject outputs (relative to project root)
     done_csv: str = "done/done.csv"   # idempotency ledger (relative to project root)
     jobs_json: str = "jobs.json"      # nested JSON describing the jobs to run (one leaf path = one job)
-    environment: Optional[Environment] = None  # conda env + kernel to run in
+    environment: Optional[Environment] = None  # primary conda env + kernel to run in
+    kernels: dict = field(default_factory=dict)  # per-notebook kernel overrides {notebook_path: kernel}
+    extra_environments: list[Environment] = field(default_factory=list)  # extra envs to also create
 
     # job ids we have submitted this session (used by status/cancel)
     submitted_jobs: list[str] = field(default_factory=list, repr=False)
@@ -59,6 +61,10 @@ class Workflow:
                 raise ValueError(
                     f"kernel={self.kernel!r} != environment.kernel={self.environment.kernel!r}"
                 )
+        # kernel overrides must point at notebooks actually in the chain
+        unknown = set(self.kernels) - set(self.notebooks)
+        if unknown:
+            raise ValueError(f"kernels keys not in notebooks: {sorted(unknown)}")
 
     # ----- paths -------------------------------------------------------------
     @property
@@ -84,6 +90,7 @@ class Workflow:
             "name": self.name,
             "notebooks": self.notebooks,
             "kernel": self.kernel,
+            "kernels": self.kernels,
             "varying": v,
             "varying_env": [name.upper() for name in v],
             "resources": self.resources,
@@ -161,13 +168,20 @@ class Workflow:
         return path
 
     def create_environment(self, ssh: Optional[SSHConfig] = None):
-        """Create the conda env + Jupyter kernel on the HPC (or locally).
+        """Create the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
 
-        Run this once before the first submit. Requires ``environment=`` to be set.
+        Creates the primary ``environment`` plus any ``extra_environments`` (each
+        to its own ``environment_<name>.yml``). Run once before the first submit.
+        Returns a list of results. Requires at least one environment to be set.
         """
-        if self.environment is None:
+        envs = ([self.environment] if self.environment else []) + list(self.extra_environments)
+        if not envs:
             raise ValueError("no environment configured on this Workflow")
-        return self.environment.create(ssh=ssh, project_dir=self.project_dir)
+        results = []
+        for env in envs:
+            fname = "environment.yml" if env is self.environment else f"environment_{env.name}.yml"
+            results.append(env.create(ssh=ssh, project_dir=self.project_dir, filename=fname))
+        return results
 
     # ----- jobs from JSON ----------------------------------------------------
     def _structure(self, jobs_json: Optional[str] = None) -> Structure:

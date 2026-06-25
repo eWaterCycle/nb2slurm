@@ -25,7 +25,7 @@ class FakeSSH:
 def make_wf(tmp_path, **kw):
     return Workflow(
         name="square",
-        notebooks=["notebooks/0_settings.ipynb", "notebooks/1_compute.ipynb"],
+        notebooks=kw.pop("notebooks", ["notebooks/0_settings.ipynb", "notebooks/1_compute.ipynb"]),
         kernel=kw.pop("kernel", "python3"),
         varying=kw.pop("varying", ["item_id"]),
         resources=dict(nodes=1, cpus=2, time="00:05:00"),
@@ -94,6 +94,27 @@ def test_setup_lines_for_module_clusters(tmp_path):
     assert "module load Python/3.11" in slurm
     # setup runs before the workflow
     assert slurm.index("module load Python/3.11") < slurm.index("python scripts/run_workflow.py")
+
+
+def test_per_notebook_kernel_override(tmp_path):
+    wf = make_wf(
+        tmp_path,
+        notebooks=["notebooks/0_settings.ipynb", "notebooks/1_compute.ipynb"],
+        kernel="myenv1",
+        kernels={"notebooks/1_compute.ipynb": "myenv2"},
+    )
+    wf.build()
+    runner = wf.runner_path.read_text()
+    assert 'KERNEL = "myenv1"' in runner
+    assert "'notebooks/1_compute.ipynb': 'myenv2'" in runner
+    assert "kernel_name=KERNELS.get(nb, KERNEL)" in runner
+    assert "kernel_name=KERNELS.get(first, KERNEL)" in runner
+
+
+def test_kernels_unknown_notebook_rejected(tmp_path):
+    with pytest.raises(ValueError, match="kernels keys not in notebooks"):
+        make_wf(tmp_path, notebooks=["notebooks/a.ipynb"],
+                kernels={"notebooks/typo.ipynb": "myenv2"})
 
 
 def test_slurm_mounts(tmp_path):
@@ -353,6 +374,7 @@ def test_config_save_load_roundtrip(tmp_path):
     assert wf2.jobs_json == "jobs.json"
     assert wf2.environment.name == "e"
     assert wf2.environment.conda_packages == ["xarray"]
+    assert wf2.kernels == wf.kernels
     assert (cfg2.host, cfg2.user, cfg2.remote_dir) == ("h", "u", "/r")
     assert cfg2.password is None
 

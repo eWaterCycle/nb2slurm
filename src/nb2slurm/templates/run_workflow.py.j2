@@ -20,6 +20,7 @@ from nb2slurm import Done
 VARYING = {{ varying }}
 NOTEBOOKS = {{ notebooks }}
 KERNEL = "{{ kernel }}"
+KERNELS = {{ kernels }}   # per-notebook kernel overrides; everything else uses KERNEL
 
 # --- parse the varying values from argv ---------------------------------------
 if len(sys.argv) - 1 != len(VARYING):
@@ -42,7 +43,7 @@ pm.execute_notebook(
     first,
     str(outdir / f"{Path(first).stem}_executed.ipynb"),
     parameters={**values, "outdir": str(outdir)},
-    kernel_name=KERNEL,
+    kernel_name=KERNELS.get(first, KERNEL),
 )
 
 settings_path = outdir / "settings.json"
@@ -57,7 +58,7 @@ for nb in NOTEBOOKS[1:]:
         nb,
         str(outdir / f"{name}_executed.ipynb"),
         parameters={"settings_path": str(settings_path)},
-        kernel_name=KERNEL,
+        kernel_name=KERNELS.get(nb, KERNEL),
     )
 
 done.mark(key)

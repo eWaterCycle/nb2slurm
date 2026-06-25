@@ -114,6 +114,31 @@ runner). With no `environment`/`conda_env`, no `conda activate` is generated —
 the job just uses whatever Python your `setup` puts on the `PATH`. The only hard
 requirement is that `kernel` names a Jupyter kernel that exists on the cluster.
 
+### Different environments for different notebooks
+
+Most notebooks share one kernel, but a few may need another (e.g. a calibration
+step). Set per-notebook overrides with `kernels` (everything not listed uses the
+default `kernel`), and list any extra environments to create with
+`extra_environments`:
+
+```python
+env1 = nb2slurm.Environment(name="myenv1", kernel="myenv1", conda_packages=["xarray"])
+env2 = nb2slurm.Environment(name="myenv2", kernel="myenv2", pip_packages=["sceua"])
+
+wf = nb2slurm.Workflow(
+    name="proj", notebooks=nbs, kernel="myenv1", varying=["region"],
+    environment=env1,                                 # default for most notebooks
+    kernels={"notebooks/step_8.ipynb": "myenv2"},     # this one runs under myenv2
+    extra_environments=[env2],                        # so myenv2 is created too
+)
+
+wf.create_environment(ssh=cfg)   # builds BOTH envs + registers BOTH kernels
+```
+
+The runner picks `kernels.get(notebook, kernel)` per notebook. Drop
+`extra_environments` if `myenv2` already exists on the cluster (or is a provided
+module) — then you only need the `kernels` mapping.
+
 New to HPC/SLURM/conda? See **[docs/hpc-for-beginners.md](docs/hpc-for-beginners.md)**
 for a plain-language primer (no Linux required).
 
