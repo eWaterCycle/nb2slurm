@@ -73,12 +73,15 @@ class Environment:
         ssh: Optional[SSHConfig] = None,
         project_dir: str | Path = ".",
         filename: str = "environment.yml",
+        stream: bool = True,
     ) -> CommandResult:
         """Create the env and register the kernel — on the HPC (ssh) or locally.
 
-        Writes ``environment.yml`` first if it is missing.
+        Writes ``environment.yml`` first if it is missing. ``stream=True`` (the
+        default) echoes conda/pip output live, since a solve + downloads can take
+        minutes and would otherwise look like a hang.
         """
         if not (Path(project_dir) / filename).exists():
             self.write(project_dir, filename)
         command = self._create_command(filename)
-        return run_shell(command, ssh, str(project_dir)).check()
+        return run_shell(command, ssh, str(project_dir), stream=stream).check()

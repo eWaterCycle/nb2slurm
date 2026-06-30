@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -66,8 +67,16 @@ class SSHConfig:
         base = self.remote_dir.rstrip("/")
         return f"{self.user}@{self.host}:{base}/{subpath}" if subpath else f"{self.user}@{self.host}:{base}/"
 
-    def run(self, command: str, cwd: Optional[str] = None) -> CommandResult:
-        """Run a single command on the cluster and return its result."""
+    def run(self, command: str, cwd: Optional[str] = None,
+            stream: bool = False) -> CommandResult:
+        """Run a single command on the cluster and return its result.
+
+        Output is drained continuously while the command runs, so a chatty
+        command (``conda env create``, ``pip install``) can't fill paramiko's
+        channel window and deadlock against ``recv_exit_status``. Pass
+        ``stream=True`` to also echo output live — useful for long-running
+        builds where you'd otherwise see nothing until they finish.
+        """
         import paramiko  # imported lazily so the package imports without a cluster
 
         cwd = cwd or self.remote_dir
@@ -84,23 +93,58 @@ class SSHConfig:
                 password=self.password,
                 **self.extra_connect_kwargs,
             )
-            _stdin, stdout, stderr = client.exec_command(wrapped)
-            status = stdout.channel.recv_exit_status()
-            out = stdout.read().decode("utf-8", "replace")
-            err = stderr.read().decode("utf-8", "replace")
+            chan = client.get_transport().open_session()
+            chan.exec_command(wrapped)
+
+            out_parts: list[str] = []
+            err_parts: list[str] = []
+
+            def _drain() -> bool:
+                got = False
+                while chan.recv_ready():
+                    chunk = chan.recv(32768).decode("utf-8", "replace")
+                    out_parts.append(chunk)
+                    if stream:
+                        print(chunk, end="", flush=True)
+                    got = True
+                while chan.recv_stderr_ready():
+                    chunk = chan.recv_stderr(32768).decode("utf-8", "replace")
+                    err_parts.append(chunk)
+                    if stream:
+                        print(chunk, end="", flush=True)
+                    got = True
+                return got
+
+            # keep reading so the remote side never blocks on a full window
+            while not chan.exit_status_ready():
+                if not _drain():
+                    time.sleep(0.05)
+            while _drain():  # whatever is left after exit
+                pass
+            status = chan.recv_exit_status()
         finally:
             client.close()
-        return CommandResult(wrapped, status, out, err)
+        return CommandResult(wrapped, status, "".join(out_parts), "".join(err_parts))
 
 
 def run_shell(command: str, ssh: Optional[SSHConfig] = None,
-              cwd: str = ".") -> CommandResult:
+              cwd: str = ".", stream: bool = False) -> CommandResult:
     """Run a shell command on the cluster (via ``ssh``) or locally (subprocess).
 
-    Shared by Workflow and Environment so the ssh-vs-local branch lives in one place.
+    Shared by Workflow and Environment so the ssh-vs-local branch lives in one
+    place. ``stream=True`` echoes output live (for long-running commands).
     """
     if ssh is not None:
-        return ssh.run(command)
+        return ssh.run(command, stream=stream)
+    if stream:
+        proc = subprocess.Popen(command, shell=True, cwd=str(cwd), text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        parts: list[str] = []
+        for line in proc.stdout:  # tee: capture and echo
+            parts.append(line)
+            print(line, end="", flush=True)
+        proc.wait()
+        return CommandResult(command, proc.returncode, "".join(parts), "")
     proc = subprocess.run(command, shell=True, cwd=str(cwd),
                           capture_output=True, text=True)
     return CommandResult(command, proc.returncode, proc.stdout, proc.stderr)
