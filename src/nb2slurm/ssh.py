@@ -6,6 +6,7 @@ user: sbatch/squeue/scancel run on the cluster, but the user only writes Python.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass, field
 from typing import Optional
@@ -43,13 +44,21 @@ class SSHConfig:
     password: Optional[str] = None
     extra_connect_kwargs: dict = field(default_factory=dict)
 
+    def key_path(self) -> Optional[str]:
+        """The private key path with ``~`` expanded, or ``None`` if unset.
+
+        paramiko opens ``key_filename`` directly and does **not** expand ``~``,
+        so we resolve it here (e.g. ``~/.ssh/id_rsa`` -> the absolute path).
+        """
+        return os.path.expanduser(self.key_filename) if self.key_filename else None
+
     def rsync_ssh(self) -> str:
         """The ``-e`` transport string rsync should use (ssh + port + key)."""
         parts = ["ssh"]
         if self.port != 22:
             parts += ["-p", str(self.port)]
         if self.key_filename:
-            parts += ["-i", self.key_filename]
+            parts += ["-i", self.key_path()]
         return " ".join(parts)
 
     def rsync_target(self, subpath: str = "") -> str:
@@ -71,7 +80,7 @@ class SSHConfig:
                 hostname=self.host,
                 port=self.port,
                 username=self.user,
-                key_filename=self.key_filename,
+                key_filename=self.key_path(),
                 password=self.password,
                 **self.extra_connect_kwargs,
             )
