@@ -167,21 +167,37 @@ class Workflow:
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return path
 
-    def create_environment(self, ssh: Optional[SSHConfig] = None):
-        """Create the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
-
-        Creates the primary ``environment`` plus any ``extra_environments`` (each
-        to its own ``environment_<name>.yml``). Run once before the first submit.
-        Returns a list of results. Requires at least one environment to be set.
-        """
+    def _environments(self) -> list[Environment]:
         envs = ([self.environment] if self.environment else []) + list(self.extra_environments)
         if not envs:
             raise ValueError("no environment configured on this Workflow")
+        return envs
+
+    def create_environment(self, ssh: Optional[SSHConfig] = None,
+                           overwrite: bool = False):
+        """Create the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
+
+        Creates the primary ``environment`` plus any ``extra_environments`` (each
+        to its own ``environment_<name>.yml``). Run once before the first submit;
+        re-running updates the env in place. Pass ``overwrite=True`` to delete and
+        rebuild from scratch. Returns a list of results.
+        """
         results = []
-        for env in envs:
+        for env in self._environments():
             fname = "environment.yml" if env is self.environment else f"environment_{env.name}.yml"
-            results.append(env.create(ssh=ssh, project_dir=self.project_dir, filename=fname))
+            results.append(env.create(ssh=ssh, project_dir=self.project_dir,
+                                       filename=fname, overwrite=overwrite))
         return results
+
+    def remove_environment(self, ssh: Optional[SSHConfig] = None):
+        """Delete the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
+
+        Removes the primary ``environment`` and any ``extra_environments``. Safe
+        when nothing is there (a missing env/kernel is ignored) — handy to recover
+        from a half-built env. Returns a list of results.
+        """
+        return [env.remove(ssh=ssh, project_dir=self.project_dir)
+                for env in self._environments()]
 
     # ----- jobs from JSON ----------------------------------------------------
     def _structure(self, jobs_json: Optional[str] = None) -> Structure:
