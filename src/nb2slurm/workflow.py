@@ -220,7 +220,8 @@ class Workflow:
     # ----- submit ------------------------------------------------------------
     def submit(self, items: Optional[Iterable[Item]] = None,
                ssh: Optional[SSHConfig] = None, dry_run: bool = False,
-               jobs_json: Optional[str] = None) -> list[str]:
+               jobs_json: Optional[str] = None,
+               concurrency: Optional[int] = None) -> list[str]:
         """Submit one SLURM job per item. Returns the submitted job ids.
 
         By default the jobs are read from the nested JSON (``self.jobs_json``):
@@ -228,11 +229,15 @@ class Workflow:
         ``items`` list, or a different ``jobs_json`` path.
 
         Concurrency is throttled with SLURM dependencies: job N waits for job
-        N-``concurrency`` to finish (afterany), so at most ``concurrency`` run
-        at once without holding the queue open.
+        N-``concurrency`` to finish (afterany), so at most ``concurrency`` run at
+        once without holding the queue open. Pass ``concurrency`` here to override
+        ``self.concurrency`` for this call; set it to ``0`` (or ``None`` on the
+        workflow) to submit every job at once with **no dependencies** — handy for
+        a handful of quick, independent jobs.
         """
         if items is None:
             items = self.jobs_from_json(jobs_json)
+        limit = self.concurrency if concurrency is None else concurrency
         job_ids: list[str] = []
         for item in items:
             values = self._normalise_item(item)
@@ -241,8 +246,8 @@ class Workflow:
             exports = ",".join(f"{k.upper()}={v}" for k, v in values.items())
 
             dep = ""
-            if len(job_ids) >= self.concurrency:
-                dep = f"--dependency=afterany:{job_ids[-self.concurrency]} "
+            if limit and len(job_ids) >= limit:
+                dep = f"--dependency=afterany:{job_ids[-limit]} "
 
             cmd = (
                 f"mkdir -p {outdir} && "
