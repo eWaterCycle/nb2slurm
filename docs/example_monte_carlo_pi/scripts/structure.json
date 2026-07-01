@@ -1,0 +1,35 @@
+{
+  "name": "monte_carlo_pi",
+  "notebooks": [
+    "notebooks/0_settings.ipynb",
+    "notebooks/1_simulate.ipynb",
+    "notebooks/2_plot.ipynb"
+  ],
+  "kernel": "montecarlo",
+  "kernels": {},
+  "varying": [
+    "n_samples",
+    "seed"
+  ],
+  "varying_env": [
+    "N_SAMPLES",
+    "SEED"
+  ],
+  "resources": {
+    "nodes": 1,
+    "cpus": 1,
+    "time": "00:05:00"
+  },
+  "conda_env": "montecarlo",
+  "setup": [],
+  "mounts": [],
+  "runner_name": "run_workflow.py",
+  "concurrency": 0,
+  "output_dir": "output",
+  "done_csv": "done/done.csv",
+  "read_vars": "n_samples seed",
+  "first_var_ref": "${n_samples}",
+  "key_expr": "${n_samples}_${seed}",
+  "outdir_expr": "output/${n_samples}/${seed}",
+  "export_expr": "N_SAMPLES=${n_samples},SEED=${seed}"
+}

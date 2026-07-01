@@ -1,0 +1,7 @@
+# one job per line, values: n_samples seed
+1000 1
+1000 2
+1000 3
+1000000 1
+1000000 2
+1000000 3
