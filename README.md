@@ -1,5 +1,7 @@
 # nb2slurm
 
+**STILL IN DEVELOPMENT**
+
 nb2slurm seamlessly makes your notebook workflow ready for SLURM upscaling.
 
 It takes a notebook workflow that runs for **one subject** (one catchment, one
