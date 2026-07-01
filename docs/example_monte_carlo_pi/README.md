@@ -2,7 +2,7 @@
 
 In this basic example we will show what is needed for nb2slurm to work. Along with niceties.
 Provided you have access to HPC the user should be able to run [this notebook](monte_carlo2slurm.ipynb) after changing the parameters in the first cell.
-The resulting output will be shown in [this branch]() to keep it clean here.
+The resulting output will be shown in [this branch](https://github.com/eWaterCycle/nb2slurm/tree/example-results/docs/example_monte_carlo_pi) [or notebook with results](https://github.com/eWaterCycle/nb2slurm/blob/example-results/docs/example_monte_carlo_pi/analyse_subsets.ipynb) to keep it clean here.
 Note that the notebooks have been run already, that is because we put emphasis on the fact that they work locally as well!
 
 ## Requirements
