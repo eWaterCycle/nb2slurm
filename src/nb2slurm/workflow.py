@@ -167,21 +167,37 @@ class Workflow:
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return path
 
-    def create_environment(self, ssh: Optional[SSHConfig] = None):
-        """Create the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
-
-        Creates the primary ``environment`` plus any ``extra_environments`` (each
-        to its own ``environment_<name>.yml``). Run once before the first submit.
-        Returns a list of results. Requires at least one environment to be set.
-        """
+    def _environments(self) -> list[Environment]:
         envs = ([self.environment] if self.environment else []) + list(self.extra_environments)
         if not envs:
             raise ValueError("no environment configured on this Workflow")
+        return envs
+
+    def create_environment(self, ssh: Optional[SSHConfig] = None,
+                           overwrite: bool = False):
+        """Create the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
+
+        Creates the primary ``environment`` plus any ``extra_environments`` (each
+        to its own ``environment_<name>.yml``). Run once before the first submit;
+        re-running updates the env in place. Pass ``overwrite=True`` to delete and
+        rebuild from scratch. Returns a list of results.
+        """
         results = []
-        for env in envs:
+        for env in self._environments():
             fname = "environment.yml" if env is self.environment else f"environment_{env.name}.yml"
-            results.append(env.create(ssh=ssh, project_dir=self.project_dir, filename=fname))
+            results.append(env.create(ssh=ssh, project_dir=self.project_dir,
+                                       filename=fname, overwrite=overwrite))
         return results
+
+    def remove_environment(self, ssh: Optional[SSHConfig] = None):
+        """Delete the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
+
+        Removes the primary ``environment`` and any ``extra_environments``. Safe
+        when nothing is there (a missing env/kernel is ignored) — handy to recover
+        from a half-built env. Returns a list of results.
+        """
+        return [env.remove(ssh=ssh, project_dir=self.project_dir)
+                for env in self._environments()]
 
     # ----- jobs from JSON ----------------------------------------------------
     def _structure(self, jobs_json: Optional[str] = None) -> Structure:
@@ -204,7 +220,8 @@ class Workflow:
     # ----- submit ------------------------------------------------------------
     def submit(self, items: Optional[Iterable[Item]] = None,
                ssh: Optional[SSHConfig] = None, dry_run: bool = False,
-               jobs_json: Optional[str] = None) -> list[str]:
+               jobs_json: Optional[str] = None,
+               concurrency: Optional[int] = None) -> list[str]:
         """Submit one SLURM job per item. Returns the submitted job ids.
 
         By default the jobs are read from the nested JSON (``self.jobs_json``):
@@ -212,11 +229,15 @@ class Workflow:
         ``items`` list, or a different ``jobs_json`` path.
 
         Concurrency is throttled with SLURM dependencies: job N waits for job
-        N-``concurrency`` to finish (afterany), so at most ``concurrency`` run
-        at once without holding the queue open.
+        N-``concurrency`` to finish (afterany), so at most ``concurrency`` run at
+        once without holding the queue open. Pass ``concurrency`` here to override
+        ``self.concurrency`` for this call; set it to ``0`` (or ``None`` on the
+        workflow) to submit every job at once with **no dependencies** — handy for
+        a handful of quick, independent jobs.
         """
         if items is None:
             items = self.jobs_from_json(jobs_json)
+        limit = self.concurrency if concurrency is None else concurrency
         job_ids: list[str] = []
         for item in items:
             values = self._normalise_item(item)
@@ -225,8 +246,8 @@ class Workflow:
             exports = ",".join(f"{k.upper()}={v}" for k, v in values.items())
 
             dep = ""
-            if len(job_ids) >= self.concurrency:
-                dep = f"--dependency=afterany:{job_ids[-self.concurrency]} "
+            if limit and len(job_ids) >= limit:
+                dep = f"--dependency=afterany:{job_ids[-limit]} "
 
             cmd = (
                 f"mkdir -p {outdir} && "
@@ -369,10 +390,15 @@ class Workflow:
         results-sync can't overwrite a notebook you changed locally while jobs
         were running.
         """
-        done_dir = str(Path(self.done_csv).parent).replace("\\", "/")
+        done_dir = str(Path(self.done_csv).parent).replace("\\", "/").rstrip("/")
+        subs = [self.output_dir.rstrip("/"), done_dir]
+        # The remote output/done dirs may not exist yet (e.g. jobs are still
+        # queued, or none has written a done ledger). Create them first so rsync
+        # doesn't fail with "change_dir ... No such file or directory" (exit 23).
+        if not dry_run:
+            self._run("mkdir -p " + " ".join(subs), ssh)
         results = []
-        for sub in (self.output_dir, done_dir):
-            sub = sub.rstrip("/")
+        for sub in subs:
             results.append(self._rsync(
                 src=ssh.rsync_target(sub + "/"),
                 dst=str(self._project / sub).rstrip("/\\") + "/",

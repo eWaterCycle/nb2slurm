@@ -17,8 +17,17 @@ interactive and batch runs — machine-specific data paths, skipping ``!pip inst
     else:
         data_dir = "/data/shared"
 
-You do *not* need it for importing helpers from ``scripts/`` — a
-``try/except ImportError`` with ``sys.path.append(".")`` works in both places.
+It also cleans up importing a helper from ``scripts/``. On the cluster the job
+runs from the project root, so ``from scripts.foo import bar`` just works; run
+interactively from a ``notebooks/`` subfolder it doesn't, so add the project root
+to the path only when running locally:
+
+    import sys
+    from pathlib import Path
+    import nb2slurm
+    if not nb2slurm.on_hpc():
+        sys.path.append(str(Path().resolve().parent))
+    from scripts.montecarlo import estimate_pi
 """
 
 from __future__ import annotations

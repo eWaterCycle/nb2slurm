@@ -22,7 +22,7 @@ while read -r {{ read_vars }} _rest; do
     mkdir -p "$outdir"
 
     dep_args=()
-    if (( ${#jobids[@]} >= CONCURRENCY )); then
+    if (( CONCURRENCY > 0 && ${#jobids[@]} >= CONCURRENCY )); then
         dep_args=(--dependency=afterany:"${jobids[-CONCURRENCY]}")
     fi
 

@@ -15,8 +15,10 @@ export NB2SLURM=1   # lets notebooks detect batch execution via nb2slurm.on_hpc(
 {{ line }}
 {% endfor %}
 {% if conda_env %}
-conda init
-source ~/.bashrc
+# Enable `conda activate` in this non-interactive shell. `conda shell.bash hook`
+# defines the conda shell function directly, so we don't rely on ~/.bashrc (which
+# usually returns early for non-interactive shells and leaves conda unusable).
+eval "$(conda shell.bash hook)"
 conda activate {{ conda_env }}
 {% endif %}
 {% for m in mounts %}

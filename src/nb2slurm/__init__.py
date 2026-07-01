@@ -25,13 +25,13 @@ Inside the notebooks themselves, use the Settings helper:
 
 from .workflow import Workflow
 from .environment import Environment
-from .ssh import SSHConfig
+from .ssh import SSHConfig, generate_key, public_key
 from .settings import Settings
 from .done import Done
 from .structure import Structure
 from .config import save_config, load_config
 from .runtime import on_hpc
 
-__all__ = ["Workflow", "Environment", "SSHConfig", "Settings", "Done",
-           "Structure", "save_config", "load_config", "on_hpc"]
+__all__ = ["Workflow", "Environment", "SSHConfig", "generate_key", "public_key",
+           "Settings", "Done", "Structure", "save_config", "load_config", "on_hpc"]
 __version__ = "0.1.0"
