@@ -385,10 +385,15 @@ class Workflow:
         results-sync can't overwrite a notebook you changed locally while jobs
         were running.
         """
-        done_dir = str(Path(self.done_csv).parent).replace("\\", "/")
+        done_dir = str(Path(self.done_csv).parent).replace("\\", "/").rstrip("/")
+        subs = [self.output_dir.rstrip("/"), done_dir]
+        # The remote output/done dirs may not exist yet (e.g. jobs are still
+        # queued, or none has written a done ledger). Create them first so rsync
+        # doesn't fail with "change_dir ... No such file or directory" (exit 23).
+        if not dry_run:
+            self._run("mkdir -p " + " ".join(subs), ssh)
         results = []
-        for sub in (self.output_dir, done_dir):
-            sub = sub.rstrip("/")
+        for sub in subs:
             results.append(self._rsync(
                 src=ssh.rsync_target(sub + "/"),
                 dst=str(self._project / sub).rstrip("/\\") + "/",
