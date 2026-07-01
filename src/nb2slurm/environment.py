@@ -60,6 +60,9 @@ class Environment:
         # mamba is much faster than conda; use it when available.
         return (
             "set -e; "
+            # run non-interactively: there's no TTY over ssh, so a
+            # 'Confirm changes? [Y/n]' prompt would hang the build forever.
+            "export CONDA_ALWAYS_YES=yes; "
             "CONDA=conda; command -v mamba >/dev/null 2>&1 && CONDA=mamba; "
             f'echo "Creating environment {self.name} with $CONDA..."; '
             f"$CONDA env create -f {filename} || $CONDA env update -f {filename}; "
