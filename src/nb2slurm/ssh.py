@@ -10,7 +10,8 @@ import os
 import subprocess
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Tuple
 
 
 @dataclass
@@ -125,6 +126,66 @@ class SSHConfig:
         finally:
             client.close()
         return CommandResult(wrapped, status, "".join(out_parts), "".join(err_parts))
+
+
+def _pub_path(path: str) -> Path:
+    """The ``.pub`` file for a key path (accepts the private path or the .pub)."""
+    p = Path(os.path.expanduser(path))
+    return p if p.suffix == ".pub" else Path(str(p) + ".pub")
+
+
+def public_key(path: str = "~/.ssh/id_rsa") -> str:
+    """Return the public key line for ``path`` (reads ``<path>.pub``).
+
+    This is the text you paste into your HPC — ``print(nb2slurm.public_key())``
+    then copy it into the cluster's key-upload page (or ``~/.ssh/authorized_keys``
+    on a login node, if your HPC lets you edit it directly).
+    """
+    return _pub_path(path).read_text().strip()
+
+
+def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
+                 comment: Optional[str] = None, overwrite: bool = False,
+                 show: bool = True) -> Tuple[Path, Path]:
+    """Create an RSA SSH keypair at ``path`` (+ ``<path>.pub``).
+
+    Returns ``(private_path, public_path)``. The private key is written 0600 and
+    the public key in ``authorized_keys`` format. An existing key is left alone
+    unless ``overwrite=True``, so this is safe to call repeatedly. Point your
+    ``SSHConfig(key_filename=...)`` at ``path``.
+
+    nb2slurm can't install the key for you — many HPCs disable password login, so
+    there's no way in. With ``show=True`` (default) the public key is printed so
+    you can copy it into your cluster's key-upload page (or its
+    ``~/.ssh/authorized_keys``); ``nb2slurm.public_key(path)`` reprints it later.
+    """
+    import paramiko  # lazy: keep the package importable without a crypto backend
+
+    priv = Path(os.path.expanduser(path))
+    pub = _pub_path(path)
+    if priv.exists() and not overwrite:
+        if show:
+            print(f"key already exists at {priv}; its public key is:\n\n{public_key(path)}")
+        return priv, pub
+    priv.parent.mkdir(parents=True, exist_ok=True)
+
+    key = paramiko.RSAKey.generate(bits)
+    key.write_private_key_file(str(priv))
+    pub.write_text(f"ssh-rsa {key.get_base64()} {comment or ''}".strip() + "\n")
+    for p, mode in ((priv, 0o600), (pub, 0o644)):
+        try:
+            os.chmod(p, mode)
+        except OSError:
+            pass  # Windows without POSIX perms; OpenSSH there enforces via ACLs
+    if show:
+        print(
+            f"created SSH key: {priv} (private) and {pub} (public)\n\n"
+            "Add the PUBLIC key below to your HPC - via its key-upload page, or by\n"
+            "appending it to ~/.ssh/authorized_keys on a login node. nb2slurm can't\n"
+            "do this step for you (clusters usually disable password login):\n\n"
+            f"{public_key(path)}"
+        )
+    return priv, pub
 
 
 def run_shell(command: str, ssh: Optional[SSHConfig] = None,
