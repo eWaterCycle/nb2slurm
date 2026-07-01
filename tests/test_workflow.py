@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ class FakeSSH:
         self.succeeds = succeeds
         self.commands = []
 
-    def run(self, command, cwd=None):
+    def run(self, command, cwd=None, stream=False):
         self.commands.append(command)
         ok = self.succeeds(command)
         return CommandResult(command, 0 if ok else 1, "out" if ok else "", "" if ok else "err")
@@ -334,7 +335,8 @@ def test_push_uploads_source_not_outputs(tmp_path):
     wf = make_wf(tmp_path)
     cmd = wf.push(_ssh(), dry_run=True)
     assert cmd[0] == "rsync"
-    assert "ssh -i ~/.ssh/id_ed25519" in cmd        # -e transport
+    # -e transport; ~ is expanded (paramiko/rsync don't expand it themselves)
+    assert f"ssh -i {os.path.expanduser('~/.ssh/id_ed25519')}" in cmd
     # outputs are excluded so push can't wipe remote results
     for ex in ("output", "done", ".git"):
         assert ex in cmd

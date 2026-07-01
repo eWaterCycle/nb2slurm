@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: nb2slurm
+abstract: >-
+  Scale a single-subject Jupyter notebook workflow to many subjects on SLURM,
+  driven entirely from a notebook (build, submit, monitor and sync results over
+  SSH). Developed within the eWaterCycle project.
+type: software
+authors:
+  - family-names: Melotto
+    given-names: Mark
+    affiliation: Delft University of Technology
+    email: markmelotto@tudelft.nl
+    orcid: "https://orcid.org/0009-0005-2727-660X"
+  - name: "The eWaterCycle project"
+    website: "https://www.ewatercycle.org/"
+repository-code: "https://github.com/eWaterCycle/nb2slurm"
+url: "https://github.com/eWaterCycle/nb2slurm"
+license: Apache-2.0
+version: 0.0.1
+keywords:
+  - SLURM
+  - HPC
+  - Jupyter
+  - papermill
+  - workflow
+  - eWaterCycle

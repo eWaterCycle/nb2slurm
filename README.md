@@ -1,6 +1,7 @@
 # nb2slurm
 
 **STILL IN DEVELOPMENT**
+*For now it nothing is guaranteed, the example monte carlo works, but cleanup is needed*
 
 nb2slurm seamlessly makes your notebook workflow ready for SLURM upscaling.
 
