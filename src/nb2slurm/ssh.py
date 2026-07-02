@@ -206,10 +206,40 @@ def public_key(path: str = "~/.ssh/id_rsa") -> str:
     return _pub_path(path).read_text().strip()
 
 
-def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
-                 comment: Optional[str] = None, overwrite: bool = False,
-                 show: bool = True) -> Tuple[Path, Path]:
-    """Create an RSA SSH keypair at ``path`` (+ ``<path>.pub``).
+def _make_keypair(priv: Path, key_type: str, bits: int, comment: Optional[str]) -> str:
+    """Write the private key to ``priv`` and return its public key line."""
+    if key_type == "ed25519":
+        # paramiko can load but not *generate* ed25519, so use cryptography
+        # (a paramiko dependency) and serialize in OpenSSH format.
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        key = Ed25519PrivateKey.generate()
+        priv.write_bytes(key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.OpenSSH,
+            serialization.NoEncryption(),
+        ))
+        pub = key.public_key().public_bytes(
+            serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH
+        ).decode()
+        return f"{pub} {comment or ''}".strip()
+
+    import paramiko  # lazy: keep the package importable without a crypto backend
+    key = paramiko.RSAKey.generate(bits)
+    key.write_private_key_file(str(priv))
+    return f"ssh-rsa {key.get_base64()} {comment or ''}".strip()
+
+
+def generate_key(path: Optional[str] = None, key_type: str = "rsa",
+                 bits: int = 4096, comment: Optional[str] = None,
+                 overwrite: bool = False, show: bool = True) -> Tuple[Path, Path]:
+    """Create an SSH keypair at ``path`` (+ ``<path>.pub``).
+
+    ``key_type`` is ``"rsa"`` (default, ``bits`` wide) or ``"ed25519"`` — the
+    modern, fixed-size type, recommended as it sidesteps the legacy RSA/DSA
+    baggage some setups trip over. When ``path`` is omitted it defaults to
+    ``~/.ssh/id_rsa`` or ``~/.ssh/id_ed25519`` to match ``key_type``.
 
     Returns ``(private_path, public_path)``. The private key is written 0600 and
     the public key in ``authorized_keys`` format. An existing key is left alone
@@ -221,7 +251,11 @@ def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
     you can copy it into your cluster's key-upload page (or its
     ``~/.ssh/authorized_keys``); ``nb2slurm.public_key(path)`` reprints it later.
     """
-    import paramiko  # lazy: keep the package importable without a crypto backend
+    key_type = key_type.lower()
+    if key_type not in ("rsa", "ed25519"):
+        raise ValueError(f"key_type must be 'rsa' or 'ed25519', got {key_type!r}")
+    if path is None:
+        path = "~/.ssh/id_ed25519" if key_type == "ed25519" else "~/.ssh/id_rsa"
 
     priv = Path(os.path.expanduser(path))
     pub = _pub_path(path)
@@ -231,9 +265,7 @@ def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
         return priv, pub
     priv.parent.mkdir(parents=True, exist_ok=True)
 
-    key = paramiko.RSAKey.generate(bits)
-    key.write_private_key_file(str(priv))
-    pub.write_text(f"ssh-rsa {key.get_base64()} {comment or ''}".strip() + "\n")
+    pub.write_text(_make_keypair(priv, key_type, bits, comment) + "\n")
     for p, mode in ((priv, 0o600), (pub, 0o644)):
         try:
             os.chmod(p, mode)
@@ -241,7 +273,7 @@ def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
             pass  # Windows without POSIX perms; OpenSSH there enforces via ACLs
     if show:
         print(
-            f"created SSH key: {priv} (private) and {pub} (public)\n\n"
+            f"created {key_type} SSH key: {priv} (private) and {pub} (public)\n\n"
             "Add the PUBLIC key below to your HPC - via its key-upload page, or by\n"
             "appending it to ~/.ssh/authorized_keys on a login node. nb2slurm can't\n"
             "do this step for you (clusters usually disable password login):\n\n"
