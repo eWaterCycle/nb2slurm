@@ -70,6 +70,41 @@ wf.status(ssh=cfg)                                     # parsed squeue
 wf.cancel(ssh=cfg)                                     # scancel what we submitted
 ```
 
+## Connecting over SSH
+
+`SSHConfig` is how nb2slurm reaches the cluster — paramiko for commands, `rsync`
+for file sync. You need an SSH key registered on the cluster. nb2slurm can make
+the key, but **you** register it (most HPCs disable password login, so there's no
+way for a tool to install it for you):
+
+```python
+# 1. make a keypair locally (ed25519 recommended; key_type="rsa" also supported)
+nb2slurm.generate_key(key_type="ed25519")     # -> ~/.ssh/id_ed25519 (+.pub), prints the public key
+# copy the printed PUBLIC key into your HPC's key-upload page / portal (SURF,
+# Snellius, ...), or into ~/.ssh/authorized_keys on a login node. Reprint any
+# time with nb2slurm.public_key("~/.ssh/id_ed25519").
+
+# 2. describe the connection
+cfg = nb2slurm.SSHConfig(
+    host="snellius.surf.nl", user="me",
+    remote_dir="/home/me/myproject",
+    key_filename="~/.ssh/id_ed25519",
+    # passphrase="…",   # only if the key is encrypted AND you're not using ssh-agent
+)
+
+# 3. check it before anything else
+cfg.test_connection()    # runs hostname/whoami, prints a clear OK/FAIL (fails fast, never hangs)
+```
+
+**Passphrase-protected keys.** The "password" most clusters prompt for is your
+key's *passphrase* (decrypted locally), not a server login. The clean way is to
+load the key into **ssh-agent** once — `ssh-add ~/.ssh/id_ed25519` — so both
+nb2slurm *and* `rsync` (`push`/`pull`) authenticate through it with no prompts.
+Passing `passphrase=` to `SSHConfig` also works, but it only unlocks the paramiko
+calls (`test_connection`/`submit`/`status`/`check`); `push`/`pull` go through the
+`rsync` CLI and still need the agent. Secrets (`password`, `passphrase`) are never
+written to disk by `save_config`.
+
 ## Creating the conda environment + kernel
 
 The SLURM job does `conda activate <env>` and papermill needs a registered
@@ -96,6 +131,23 @@ Passing `environment=env` to `Workflow` keeps the names in sync (it errors if
 `kernel`/`conda_env` disagree) and makes `build()` also write `environment.yml`.
 `create_environment()` uses `mamba` when available, falls back to `conda`, and
 registers the kernel via `ipykernel`. Omit `ssh=` to build the env locally instead.
+It runs **non-interactively** (it never stalls on a conda `[Y/n]` prompt over SSH)
+and **streams** conda/mamba output live, so a multi-minute solve doesn't look like
+a hang.
+
+### Rebuilding or removing an environment
+
+`create_environment` is idempotent: re-running it *updates the env in place* (no
+`Overwrite?` prompt). To recover from a half-built env, or force a clean slate:
+
+```python
+wf.create_environment(ssh=cfg, overwrite=True)  # delete, then rebuild from scratch
+wf.remove_environment(ssh=cfg)                  # delete the env AND its Jupyter kernel
+wf.environment.exists(ssh=cfg)                  # -> True/False, changes nothing
+```
+
+(`Environment` has the same `.create(overwrite=...)`, `.remove()`, and `.exists()`
+if you're driving one directly.)
 
 ### Using a cluster's existing environment (no env creation)
 
@@ -248,6 +300,11 @@ wf.submit([("NL","123","ssp126")], ssh=cfg)   # override: run an explicit subset
 wf.submit(ssh=cfg, jobs_json="rerun.json")    # override: use a different file
 ```
 
+`concurrency` caps how many jobs run at once, chained with SLURM `afterany`
+dependencies so you don't flood the queue. Set **`concurrency=0`** to submit
+everything at once with **no dependencies** — ideal for a handful of quick,
+independent jobs. You can also override it per call: `wf.submit(ssh=cfg, concurrency=0)`.
+
 Because each job's output dir is built from the JSON, your first notebook never
 builds folders — it just receives `outdir` and writes `settings.json`. The
 underlying parser is exposed as `nb2slurm.Structure` if you want it directly
@@ -271,7 +328,10 @@ The split is the safety mechanism:
   back can't overwrite a notebook you changed locally while jobs were running.
 
 So the normal loop after editing a notebook is: `push` the change, submit again
-(finished work is skipped via `done.csv`), then `pull` results when ready.
+(finished work is skipped via `done.csv`), then `pull` results when ready. `pull`
+is safe to run even before any results exist — it creates the remote `output/`
+and `done/` dirs if they're missing rather than erroring, and is fine to re-run as
+more jobs finish.
 
 ## Control notebooks
 
