@@ -127,7 +127,9 @@ class SSHConfig:
         A quick first check before push/submit. Returns True on success. On an
         encrypted key it prints the passphrase hint from ``_connect``.
         """
-        target = f"{self.user}@{self.host}:{self.port}"
+        # show the port only when it's non-default, so the message reads like a
+        # normal ssh target (host:22 looks like a connection string and confuses)
+        target = self.user + "@" + self.host + (f" (port {self.port})" if self.port != 22 else "")
         try:
             res = self.run(command, cwd="~")  # ~, not remote_dir (may not exist yet)
         except Exception as e:
