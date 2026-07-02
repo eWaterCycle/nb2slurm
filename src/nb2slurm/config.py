@@ -44,6 +44,7 @@ def _workflow_from_dict(d: dict) -> Workflow:
 def _ssh_to_dict(ssh: SSHConfig) -> dict:
     d = asdict(ssh)
     d.pop("password", None)      # never persist secrets to disk
+    d.pop("passphrase", None)
     return d
 
 

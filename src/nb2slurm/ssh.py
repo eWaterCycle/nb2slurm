@@ -33,9 +33,18 @@ class CommandResult:
 class SSHConfig:
     """Connection details for the HPC login node.
 
-    Provide either ``key_filename`` or ``password`` (or rely on an agent/known
-    config). ``remote_dir`` is the project directory on the cluster that the
-    generated scripts live in; commands are run from there.
+    Provide a ``key_filename`` (or rely on an agent/known config). ``remote_dir``
+    is the project directory on the cluster that the generated scripts live in;
+    commands are run from there.
+
+    Auth notes:
+
+    * ``passphrase`` decrypts a passphrase-protected private key (this is what
+      Snellius and most clusters use — the "password" you type is your key's
+      passphrase, not a server account password).
+    * ``password`` is for actual password authentication (rare on HPC).
+    * Best of all is loading the key into ``ssh-agent`` (``ssh-add``): then you
+      need neither here, and rsync (``push``/``pull``) also works without prompts.
     """
 
     host: str
@@ -44,6 +53,7 @@ class SSHConfig:
     port: int = 22
     key_filename: Optional[str] = None
     password: Optional[str] = None
+    passphrase: Optional[str] = None
     extra_connect_kwargs: dict = field(default_factory=dict)
 
     def key_path(self) -> Optional[str]:
@@ -68,6 +78,61 @@ class SSHConfig:
         base = self.remote_dir.rstrip("/")
         return f"{self.user}@{self.host}:{base}/{subpath}" if subpath else f"{self.user}@{self.host}:{base}/"
 
+    def _connect(self):
+        """Open an authenticated paramiko client.
+
+        Translates paramiko's encrypted-key error into a clear hint: if the key
+        needs a passphrase and none got it unlocked, tell the user to pass
+        ``passphrase=`` (or use ssh-agent) rather than surfacing a cryptic error.
+        """
+        import paramiko  # imported lazily so the package imports without a cluster
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # bound the connect so an unreachable host fails fast instead of hanging
+        # forever; the user can override via extra_connect_kwargs.
+        opts = {"timeout": 30, "auth_timeout": 30, "banner_timeout": 30}
+        opts.update(self.extra_connect_kwargs)
+        try:
+            client.connect(
+                hostname=self.host,
+                port=self.port,
+                username=self.user,
+                key_filename=self.key_path(),
+                password=self.password,
+                passphrase=self.passphrase,
+                **opts,
+            )
+        except paramiko.PasswordRequiredException as e:
+            client.close()
+            raise paramiko.PasswordRequiredException(
+                f"private key {self.key_path()!r} is encrypted with a passphrase. "
+                "Pass it with SSHConfig(passphrase=...), or (recommended) load the "
+                "key into ssh-agent first with `ssh-add` so rsync push/pull work too."
+            ) from e
+        except Exception:
+            client.close()
+            raise
+        return client
+
+    def test_connection(self, command: str = "hostname && whoami") -> bool:
+        """Try to connect and run a trivial command; print a clear ok/fail.
+
+        A quick first check before push/submit. Returns True on success. On an
+        encrypted key it prints the passphrase hint from ``_connect``.
+        """
+        target = f"{self.user}@{self.host}:{self.port}"
+        try:
+            res = self.run(command, cwd="~")  # ~, not remote_dir (may not exist yet)
+        except Exception as e:
+            print(f"FAIL: could not connect to {target}\n  {type(e).__name__}: {e}")
+            return False
+        if res.exit_status == 0:
+            print(f"OK: connected to {target}\n{res.stdout.strip()}")
+            return True
+        print(f"FAIL: connected to {target} but the command failed\n  {res.stderr.strip()}")
+        return False
+
     def run(self, command: str, cwd: Optional[str] = None,
             stream: bool = False) -> CommandResult:
         """Run a single command on the cluster and return its result.
@@ -78,22 +143,11 @@ class SSHConfig:
         ``stream=True`` to also echo output live — useful for long-running
         builds where you'd otherwise see nothing until they finish.
         """
-        import paramiko  # imported lazily so the package imports without a cluster
-
         cwd = cwd or self.remote_dir
         wrapped = f"cd {cwd} && {command}" if cwd else command
 
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self._connect()
         try:
-            client.connect(
-                hostname=self.host,
-                port=self.port,
-                username=self.user,
-                key_filename=self.key_path(),
-                password=self.password,
-                **self.extra_connect_kwargs,
-            )
             chan = client.get_transport().open_session()
             chan.exec_command(wrapped)
 
