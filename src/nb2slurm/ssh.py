@@ -92,6 +92,12 @@ class SSHConfig:
         # bound the connect so an unreachable host fails fast instead of hanging
         # forever; the user can override via extra_connect_kwargs.
         opts = {"timeout": 30, "auth_timeout": 30, "banner_timeout": 30}
+        if self.key_filename:
+            # An explicit key means "use this one" (plus ssh-agent). Don't also
+            # scan ~/.ssh for other default keys: a stray/legacy id_dsa there makes
+            # paramiko crash on modern cryptography backends
+            # ("q must be exactly 160, 224, or 256 bits long"). Agent use stays on.
+            opts["look_for_keys"] = False
         opts.update(self.extra_connect_kwargs)
         try:
             client.connect(
