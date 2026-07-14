@@ -334,6 +334,19 @@ is safe to run even before any results exist — it creates the remote `output/`
 and `done/` dirs if they're missing rather than erroring, and is fine to re-run as
 more jobs finish.
 
+### Rerunning: clearing the done ledger
+
+`done.csv` is what makes re-submitting skip finished work. To force everything
+to rerun (e.g. after changing a notebook's logic, not just its inputs), clear it:
+
+```python
+wf.reset_done(ssh=cfg)   # deletes done_csv on the cluster (locally if ssh is omitted)
+wf.submit(ssh=cfg)       # nothing is skipped now
+```
+
+To rerun only some jobs, either edit `done.csv` by hand (one `key` per row) or
+pass an explicit `items=` list to `submit()` instead of resetting the whole ledger.
+
 ## Control notebooks
 
 For real use the control surface is split into four notebooks (see

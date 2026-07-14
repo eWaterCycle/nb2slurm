@@ -63,3 +63,13 @@ class Done:
                 print(f"Marked {key} as done.")
             else:
                 print(f"{key} already recorded as done.")
+
+    def clear(self) -> None:
+        """Delete the ledger so every key is treated as not-done again.
+
+        No-op if the file doesn't exist. It's just a CSV, so removing individual
+        rows by hand also works if you only want to rerun a subset.
+        """
+        with FileLock(self._lock, timeout=LOCK_TIMEOUT):
+            if self.csv_file.exists():
+                self.csv_file.unlink()

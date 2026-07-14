@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Union
 
+from .done import Done
 from .environment import Environment
 from .render import write_rendered
 from .ssh import CommandResult, SSHConfig, run_shell
@@ -349,6 +350,21 @@ class Workflow:
             return
         self._run("scancel " + " ".join(targets), ssh).check()
         print(f"cancelled {len(targets)} job(s)")
+
+    # ----- done ledger ---------------------------------------------------------
+    def reset_done(self, ssh: Optional[SSHConfig] = None) -> None:
+        """Clear the done ledger so the next ``submit()`` reruns every job.
+
+        Deletes ``done_csv`` on the cluster when ``ssh`` is given, or locally
+        otherwise. Safe to call even if the ledger doesn't exist yet. To rerun
+        only a subset, edit the CSV directly (it's just ``key`` per row) or pass
+        an explicit ``items=`` list to ``submit()``.
+        """
+        if ssh is not None:
+            self._run(f"rm -f {self.done_csv}", ssh)
+        else:
+            Done(self._project / self.done_csv).clear()
+        print(f"cleared {self.done_csv} - next submit() will rerun everything")
 
     # ----- rsync (push source up / pull results down) ------------------------
     def _rsync(self, src: str, dst: str, ssh: SSHConfig,
