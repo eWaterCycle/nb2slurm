@@ -312,8 +312,9 @@ underlying parser is exposed as `nb2slurm.Structure` if you want it directly
 
 ## Moving files: push source up, pull results down
 
-nb2slurm wraps `rsync` (so you need `rsync` available locally) with two
-deliberately one-directional helpers:
+nb2slurm wraps `rsync` (so you need `rsync` available locally — on Windows see
+**[docs/FOR_WINDOWS_USERS.ipynb](docs/FOR_WINDOWS_USERS.ipynb)** for installing
+it via WSL) with two deliberately one-directional helpers:
 
 ```python
 wf.push(ssh=cfg)   # local project  -> cluster:  notebooks/, scripts/, jobs.json, ...
