@@ -19,7 +19,12 @@ from .ssh import CommandResult, SSHConfig, run_shell
 from .structure import Structure
 
 # local cruft never worth uploading (the output dirs are excluded dynamically in push)
-PUSH_EXCLUDES = [".git", "__pycache__", ".ipynb_checkpoints"]
+PUSH_EXCLUDES = [
+    ".git", "__pycache__", ".ipynb_checkpoints",
+    ".env", ".venv", "venv", ".DS_Store",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache",
+    "*.egg-info", ".idea", ".vscode", ".claude"
+]
 
 Item = Union[Any, Sequence[Any], Mapping[str, Any]]
 
