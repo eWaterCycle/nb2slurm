@@ -8,15 +8,26 @@ same parent path; ``None``/``[]``/``{}`` means the path ends there.
     import nb2slurm
 
     spec = {
-        "NL": {"123": ["ssp126", "ssp245"]},
-        "DE": {"789": ["ssp585"]},
-    }
+        "Netherlands":  {"north": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                        "south": ["green_climate", "climate_as_we_are", "heavy_industrialization"]
+                         },
+        "Germany":      {"north": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                         "south": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                         "east": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                         "west": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                         },
+}
     struct = nb2slurm.Structure(spec)          # or Structure.from_json("jobs.json")
 
     struct.jobs()
-    # [("NL", "123", "ssp126"), ("NL", "123", "ssp245"), ("DE", "789", "ssp585")]
+    # [("Netherlands", "north", "green_climate"), ("Netherlands", "north", "climate_as_we_are"),
+        ("Netherlands", "north", "heavy_industrialization"), ("Netherlands", "south", "green_climate"),
+        ("Netherlands", "south", "climate_as_we_are"), ("Netherlands", "south", "heavy_industrialization"),
+        ...
+        ...
+    ]
 
-    struct.build("output")                      # creates output/NL/123/ssp126, ... and returns paths
+    struct.build("output")                      # creates output/Netherlands/north/..., ... and returns paths
 
 The same file is read by ``Workflow.submit`` to decide which jobs to launch, so
 the directory tree and the job list can never drift apart.
