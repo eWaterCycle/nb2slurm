@@ -50,7 +50,9 @@ class Environment:
             lines += [f"      - {p}" for p in self.pip_packages]
         return "\n".join(lines) + "\n"
 
-    def write(self, project_dir: str | Path = ".", filename: str = "environment.yml") -> Path:
+    def write(
+        self, project_dir: str | Path = ".", filename: str = "environment.yml"
+    ) -> Path:
         """Write the ``environment.yml`` into the project directory."""
         path = Path(project_dir) / filename
         path.write_text(self.to_yaml(), encoding="utf-8")
@@ -114,7 +116,9 @@ class Environment:
         Safe to call when nothing is there yet (a missing env/kernel is ignored).
         Use it to recover from a half-built env or to force a clean rebuild.
         """
-        return run_shell(self._remove_command(), ssh, str(project_dir), stream=stream).check()
+        return run_shell(
+            self._remove_command(), ssh, str(project_dir), stream=stream
+        ).check()
 
     def create(
         self,

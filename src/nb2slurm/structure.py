@@ -45,7 +45,9 @@ class Structure:
 
     def __init__(self, spec: Mapping[str, Any] | None = None):
         if spec is not None and not isinstance(spec, Mapping):
-            raise TypeError("Structure spec must be a dict (nested job/output hierarchy)")
+            raise TypeError(
+                "Structure spec must be a dict (nested job/output hierarchy)"
+            )
         self.spec: dict[str, Any] = dict(spec or {})
 
     @classmethod
@@ -71,7 +73,8 @@ class Structure:
             for item in node:
                 sub = f"{prefix}/{item}" if prefix else str(item)
                 leaves.extend(
-                    Structure._walk(item, prefix) if isinstance(item, (Mapping, list, tuple, set))
+                    Structure._walk(item, prefix)
+                    if isinstance(item, (Mapping, list, tuple, set))
                     else [sub]
                 )
             return leaves

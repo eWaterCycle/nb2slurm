@@ -24,7 +24,7 @@ from .workflow import Workflow
 
 
 def _workflow_to_dict(wf: Workflow) -> dict:
-    d = asdict(wf)               # recurses Environment, resources, mounts
+    d = asdict(wf)  # recurses Environment, resources, mounts
     d.pop("submitted_jobs", None)  # runtime state, not configuration
     return d
 
@@ -43,12 +43,13 @@ def _workflow_from_dict(d: dict) -> Workflow:
 
 def _ssh_to_dict(ssh: SSHConfig) -> dict:
     d = asdict(ssh)
-    d.pop("password", None)      # never persist secrets to disk
+    d.pop("password", None)  # never persist secrets to disk
     return d
 
 
-def save_config(path: str | Path, *, workflow: Workflow,
-                ssh: Optional[SSHConfig] = None) -> Path:
+def save_config(
+    path: str | Path, *, workflow: Workflow, ssh: Optional[SSHConfig] = None
+) -> Path:
     """Write the workflow (and optional SSH) config to ``path`` as JSON."""
     data = {"workflow": _workflow_to_dict(workflow)}
     if ssh is not None:

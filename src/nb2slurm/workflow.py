@@ -20,10 +20,20 @@ from .structure import Structure
 
 # local cruft never worth uploading (the output dirs are excluded dynamically in push)
 PUSH_EXCLUDES = [
-    ".git", "__pycache__", ".ipynb_checkpoints",
-    ".env", ".venv", "venv", ".DS_Store",
-    ".pytest_cache", ".mypy_cache", ".ruff_cache",
-    "*.egg-info", ".idea", ".vscode", ".claude"
+    ".git",
+    "__pycache__",
+    ".ipynb_checkpoints",
+    ".env",
+    ".venv",
+    "venv",
+    ".DS_Store",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "*.egg-info",
+    ".idea",
+    ".vscode",
+    ".claude",
 ]
 
 Item = Union[Any, Sequence[Any], Mapping[str, Any]]
@@ -35,19 +45,31 @@ class Workflow:
     notebooks: list[str]
     kernel: str
     varying: list[str]
-    resources: dict = field(default_factory=lambda: {"nodes": 1, "cpus": 1, "time": "01:00:00"})
+    resources: dict = field(
+        default_factory=lambda: {"nodes": 1, "cpus": 1, "time": "01:00:00"}
+    )
     project_dir: str = "."
     conda_env: Optional[str] = None
-    setup: list[str] = field(default_factory=list)  # raw shell lines run before the job, e.g. `module load Python/3.11`
+    setup: list[str] = field(
+        default_factory=list
+    )  # raw shell lines run before the job, e.g. `module load Python/3.11`
     mounts: list[dict] = field(default_factory=list)
     runner_name: str = "run_workflow.py"
     concurrency: int = 3
-    output_dir: str = "output"        # root for per-subject outputs (relative to project root)
-    done_csv: str = "done/done.csv"   # idempotency ledger (relative to project root)
-    jobs_json: str = "jobs.json"      # nested JSON describing the jobs to run (one leaf path = one job)
+    output_dir: str = (
+        "output"  # root for per-subject outputs (relative to project root)
+    )
+    done_csv: str = "done/done.csv"  # idempotency ledger (relative to project root)
+    jobs_json: str = (
+        "jobs.json"  # nested JSON describing the jobs to run (one leaf path = one job)
+    )
     environment: Optional[Environment] = None  # primary conda env + kernel to run in
-    kernels: dict = field(default_factory=dict)  # per-notebook kernel overrides {notebook_path: kernel}
-    extra_environments: list[Environment] = field(default_factory=list)  # extra envs to also create
+    kernels: dict = field(
+        default_factory=dict
+    )  # per-notebook kernel overrides {notebook_path: kernel}
+    extra_environments: list[Environment] = field(
+        default_factory=list
+    )  # extra envs to also create
 
     # job ids we have submitted this session (used by status/cancel)
     submitted_jobs: list[str] = field(default_factory=list, repr=False)
@@ -110,7 +132,9 @@ class Workflow:
             "read_vars": " ".join(v),
             "first_var_ref": "${%s}" % v[0],
             "key_expr": "_".join("${%s}" % name for name in v),
-            "outdir_expr": self.output_dir.rstrip("/") + "/" + "/".join("${%s}" % name for name in v),
+            "outdir_expr": self.output_dir.rstrip("/")
+            + "/"
+            + "/".join("${%s}" % name for name in v),
             "export_expr": ",".join("%s=${%s}" % (name.upper(), name) for name in v),
         }
 
@@ -144,9 +168,24 @@ class Workflow:
         written = {
             "runner": write_rendered("run_workflow.py.j2", self.runner_path, ctx),
             "slurm": write_rendered("job.slurm.j2", self.slurm_path, ctx),
-            "submit_batch": write_rendered("submit_batch.sh.j2", self.scripts_dir / "submit_batch.sh", ctx, executable=True),
-            "submit_jobs": write_rendered("submit_jobs.sh.j2", self.scripts_dir / "submit_jobs.sh", ctx, executable=True),
-            "cancel": write_rendered("cancel_jobs.sh.j2", self.scripts_dir / "cancel_jobs.sh", ctx, executable=True),
+            "submit_batch": write_rendered(
+                "submit_batch.sh.j2",
+                self.scripts_dir / "submit_batch.sh",
+                ctx,
+                executable=True,
+            ),
+            "submit_jobs": write_rendered(
+                "submit_jobs.sh.j2",
+                self.scripts_dir / "submit_jobs.sh",
+                ctx,
+                executable=True,
+            ),
+            "cancel": write_rendered(
+                "cancel_jobs.sh.j2",
+                self.scripts_dir / "cancel_jobs.sh",
+                ctx,
+                executable=True,
+            ),
         }
         structure = self.scripts_dir / "structure.json"
         structure.write_text(json.dumps(ctx, indent=2, default=str), encoding="utf-8")
@@ -173,13 +212,16 @@ class Workflow:
         return path
 
     def _environments(self) -> list[Environment]:
-        envs = ([self.environment] if self.environment else []) + list(self.extra_environments)
+        envs = ([self.environment] if self.environment else []) + list(
+            self.extra_environments
+        )
         if not envs:
             raise ValueError("no environment configured on this Workflow")
         return envs
 
-    def create_environment(self, ssh: Optional[SSHConfig] = None,
-                           overwrite: bool = False):
+    def create_environment(
+        self, ssh: Optional[SSHConfig] = None, overwrite: bool = False
+    ):
         """Create the conda env(s) + Jupyter kernel(s) on the HPC (or locally).
 
         Creates the primary ``environment`` plus any ``extra_environments`` (each
@@ -189,9 +231,19 @@ class Workflow:
         """
         results = []
         for env in self._environments():
-            fname = "environment.yml" if env is self.environment else f"environment_{env.name}.yml"
-            results.append(env.create(ssh=ssh, project_dir=self.project_dir,
-                                       filename=fname, overwrite=overwrite))
+            fname = (
+                "environment.yml"
+                if env is self.environment
+                else f"environment_{env.name}.yml"
+            )
+            results.append(
+                env.create(
+                    ssh=ssh,
+                    project_dir=self.project_dir,
+                    filename=fname,
+                    overwrite=overwrite,
+                )
+            )
         return results
 
     def remove_environment(self, ssh: Optional[SSHConfig] = None):
@@ -201,8 +253,10 @@ class Workflow:
         when nothing is there (a missing env/kernel is ignored) — handy to recover
         from a half-built env. Returns a list of results.
         """
-        return [env.remove(ssh=ssh, project_dir=self.project_dir)
-                for env in self._environments()]
+        return [
+            env.remove(ssh=ssh, project_dir=self.project_dir)
+            for env in self._environments()
+        ]
 
     # ----- jobs from JSON ----------------------------------------------------
     def _structure(self, jobs_json: Optional[str] = None) -> Structure:
@@ -223,10 +277,14 @@ class Workflow:
         return run_shell(command, ssh, self._project)
 
     # ----- submit ------------------------------------------------------------
-    def submit(self, items: Optional[Iterable[Item]] = None,
-               ssh: Optional[SSHConfig] = None, dry_run: bool = False,
-               jobs_json: Optional[str] = None,
-               concurrency: Optional[int] = None) -> list[str]:
+    def submit(
+        self,
+        items: Optional[Iterable[Item]] = None,
+        ssh: Optional[SSHConfig] = None,
+        dry_run: bool = False,
+        jobs_json: Optional[str] = None,
+        concurrency: Optional[int] = None,
+    ) -> list[str]:
         """Submit one SLURM job per item. Returns the submitted job ids.
 
         By default the jobs are read from the nested JSON (``self.jobs_json``):
@@ -284,31 +342,43 @@ class Workflow:
         # user's profile (where `conda init` writes) before checking for them.
         prof = "source ~/.bashrc 2>/dev/null; "
         checks = [
-            ("project directory", "pwd",
-             f"create {self.project_dir!r} on the cluster (remote_dir) and upload your project"),
-            ("notebooks present",
-             f'ok=1; for f in {nbs}; do [ -f "$f" ] || {{ echo "missing $f"; ok=0; }}; done; [ "$ok" = 1 ]',
-             "upload your notebooks/ folder into remote_dir"),
-            ("scripts built",
-             f"test -f scripts/job.slurm && test -f scripts/{self.runner_name}",
-             "run wf.build() and upload the scripts/ folder"),
+            (
+                "project directory",
+                "pwd",
+                f"create {self.project_dir!r} on the cluster (remote_dir) and upload your project",
+            ),
+            (
+                "notebooks present",
+                f'ok=1; for f in {nbs}; do [ -f "$f" ] || {{ echo "missing $f"; ok=0; }}; done; [ "$ok" = 1 ]',
+                "upload your notebooks/ folder into remote_dir",
+            ),
+            (
+                "scripts built",
+                f"test -f scripts/job.slurm && test -f scripts/{self.runner_name}",
+                "run wf.build() and upload the scripts/ folder",
+            ),
         ]
         if self.conda_env:
-            checks.append((
-                f"conda env '{self.conda_env}'",
-                prof + f'conda env list | grep -E "[/ ]{self.conda_env}([ /]|$)"',
-                "run wf.create_environment(ssh=cfg) first",
-            ))
-        checks.append((
-            f"kernel '{self.kernel}'",
-            prof + f'test -d "$HOME/.local/share/jupyter/kernels/{self.kernel}" || '
-                   f'jupyter kernelspec list 2>/dev/null | grep -qw "{self.kernel}"',
-            "run wf.create_environment(ssh=cfg) to register the kernel",
-        ))
+            checks.append(
+                (
+                    f"conda env '{self.conda_env}'",
+                    prof + f'conda env list | grep -E "[/ ]{self.conda_env}([ /]|$)"',
+                    "run wf.create_environment(ssh=cfg) first",
+                )
+            )
+        checks.append(
+            (
+                f"kernel '{self.kernel}'",
+                prof + f'test -d "$HOME/.local/share/jupyter/kernels/{self.kernel}" || '
+                f'jupyter kernelspec list 2>/dev/null | grep -qw "{self.kernel}"',
+                "run wf.create_environment(ssh=cfg) to register the kernel",
+            )
+        )
         return checks
 
-    def check(self, ssh: Optional[SSHConfig] = None,
-              raise_on_error: bool = True) -> list[dict]:
+    def check(
+        self, ssh: Optional[SSHConfig] = None, raise_on_error: bool = True
+    ) -> list[dict]:
         """Verify the cluster is ready before submitting.
 
         Confirms remote_dir, the notebooks, the built scripts, the conda env and
@@ -320,17 +390,26 @@ class Workflow:
         for name, command, hint in self._preflight_checks():
             res = self._run(command, ssh)
             ok = res.exit_status == 0
-            print(f"  {'OK ' if ok else 'FAIL'} {name}" + ("" if ok else f"  -> {hint}"))
-            results.append({"name": name, "ok": ok,
-                            "detail": (res.stdout or res.stderr).strip(), "hint": hint})
+            print(
+                f"  {'OK ' if ok else 'FAIL'} {name}" + ("" if ok else f"  -> {hint}")
+            )
+            results.append(
+                {
+                    "name": name,
+                    "ok": ok,
+                    "detail": (res.stdout or res.stderr).strip(),
+                    "hint": hint,
+                }
+            )
         failed = [r["name"] for r in results if not r["ok"]]
         if failed and raise_on_error:
             raise RuntimeError("preflight check failed: " + ", ".join(failed))
         return results
 
     # ----- status ------------------------------------------------------------
-    def status(self, ssh: Optional[SSHConfig] = None,
-               user: Optional[str] = None) -> list[dict]:
+    def status(
+        self, ssh: Optional[SSHConfig] = None, user: Optional[str] = None
+    ) -> list[dict]:
         """Return current queue entries as a list of dicts (parsed squeue)."""
         who = user or (ssh.user if ssh else "$USER")
         fmt = "%i|%j|%T|%M|%R"
@@ -340,13 +419,21 @@ class Workflow:
             if not line.strip():
                 continue
             jid, name, state, t, reason = line.split("|")
-            rows.append({"job_id": jid, "name": name, "state": state,
-                         "time": t, "reason": reason})
+            rows.append(
+                {
+                    "job_id": jid,
+                    "name": name,
+                    "state": state,
+                    "time": t,
+                    "reason": reason,
+                }
+            )
         return rows
 
     # ----- cancel ------------------------------------------------------------
-    def cancel(self, ssh: Optional[SSHConfig] = None,
-               job_ids: Optional[Sequence[str]] = None) -> None:
+    def cancel(
+        self, ssh: Optional[SSHConfig] = None, job_ids: Optional[Sequence[str]] = None
+    ) -> None:
         """Cancel jobs. Defaults to the ones submitted this session."""
         targets = list(job_ids) if job_ids is not None else list(self.submitted_jobs)
         if not targets:
@@ -356,9 +443,15 @@ class Workflow:
         print(f"cancelled {len(targets)} job(s)")
 
     # ----- rsync (push source up / pull results down) ------------------------
-    def _rsync(self, src: str, dst: str, ssh: SSHConfig,
-               excludes: Sequence[str] = (), delete: bool = False,
-               dry_run: bool = False):
+    def _rsync(
+        self,
+        src: str,
+        dst: str,
+        ssh: SSHConfig,
+        excludes: Sequence[str] = (),
+        delete: bool = False,
+        dry_run: bool = False,
+    ):
         cmd = ["rsync", "-az", "-e", ssh.rsync_ssh()]
         if delete:
             cmd.append("--delete")
@@ -369,7 +462,9 @@ class Workflow:
             print(" ".join(cmd))
             return cmd
         proc = subprocess.run(cmd, capture_output=True, text=True)
-        return CommandResult(" ".join(cmd), proc.returncode, proc.stdout, proc.stderr).check()
+        return CommandResult(
+            " ".join(cmd), proc.returncode, proc.stdout, proc.stderr
+        ).check()
 
     def push(self, ssh: SSHConfig, delete: bool = False, dry_run: bool = False):
         """Upload the project to the cluster (source only — never outputs).
@@ -384,7 +479,10 @@ class Workflow:
         return self._rsync(
             src=str(self._project).rstrip("/\\") + "/",
             dst=ssh.rsync_target(),
-            ssh=ssh, excludes=excludes, delete=delete, dry_run=dry_run,
+            ssh=ssh,
+            excludes=excludes,
+            delete=delete,
+            dry_run=dry_run,
         )
 
     def pull(self, ssh: SSHConfig, delete: bool = False, dry_run: bool = False):
@@ -404,9 +502,13 @@ class Workflow:
             self._run("mkdir -p " + " ".join(subs), ssh)
         results = []
         for sub in subs:
-            results.append(self._rsync(
-                src=ssh.rsync_target(sub + "/"),
-                dst=str(self._project / sub).rstrip("/\\") + "/",
-                ssh=ssh, delete=delete, dry_run=dry_run,
-            ))
+            results.append(
+                self._rsync(
+                    src=ssh.rsync_target(sub + "/"),
+                    dst=str(self._project / sub).rstrip("/\\") + "/",
+                    ssh=ssh,
+                    delete=delete,
+                    dry_run=dry_run,
+                )
+            )
         return results

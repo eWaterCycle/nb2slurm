@@ -66,10 +66,15 @@ class SSHConfig:
     def rsync_target(self, subpath: str = "") -> str:
         """A ``user@host:remote_dir/<subpath>`` spec for rsync."""
         base = self.remote_dir.rstrip("/")
-        return f"{self.user}@{self.host}:{base}/{subpath}" if subpath else f"{self.user}@{self.host}:{base}/"
+        return (
+            f"{self.user}@{self.host}:{base}/{subpath}"
+            if subpath
+            else f"{self.user}@{self.host}:{base}/"
+        )
 
-    def run(self, command: str, cwd: Optional[str] = None,
-            stream: bool = False) -> CommandResult:
+    def run(
+        self, command: str, cwd: Optional[str] = None, stream: bool = False
+    ) -> CommandResult:
         """Run a single command on the cluster and return its result.
 
         Output is drained continuously while the command runs, so a chatty
@@ -144,9 +149,13 @@ def public_key(path: str = "~/.ssh/id_rsa") -> str:
     return _pub_path(path).read_text().strip()
 
 
-def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
-                 comment: Optional[str] = None, overwrite: bool = False,
-                 show: bool = True) -> Tuple[Path, Path]:
+def generate_key(
+    path: str = "~/.ssh/id_rsa",
+    bits: int = 4096,
+    comment: Optional[str] = None,
+    overwrite: bool = False,
+    show: bool = True,
+) -> Tuple[Path, Path]:
     """Create an RSA SSH keypair at ``path`` (+ ``<path>.pub``).
 
     Returns ``(private_path, public_path)``. The private key is written 0600 and
@@ -165,7 +174,9 @@ def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
     pub = _pub_path(path)
     if priv.exists() and not overwrite:
         if show:
-            print(f"key already exists at {priv}; its public key is:\n\n{public_key(path)}")
+            print(
+                f"key already exists at {priv}; its public key is:\n\n{public_key(path)}"
+            )
         return priv, pub
     priv.parent.mkdir(parents=True, exist_ok=True)
 
@@ -188,8 +199,9 @@ def generate_key(path: str = "~/.ssh/id_rsa", bits: int = 4096,
     return priv, pub
 
 
-def run_shell(command: str, ssh: Optional[SSHConfig] = None,
-              cwd: str = ".", stream: bool = False) -> CommandResult:
+def run_shell(
+    command: str, ssh: Optional[SSHConfig] = None, cwd: str = ".", stream: bool = False
+) -> CommandResult:
     """Run a shell command on the cluster (via ``ssh``) or locally (subprocess).
 
     Shared by Workflow and Environment so the ssh-vs-local branch lives in one
@@ -198,14 +210,21 @@ def run_shell(command: str, ssh: Optional[SSHConfig] = None,
     if ssh is not None:
         return ssh.run(command, stream=stream)
     if stream:
-        proc = subprocess.Popen(command, shell=True, cwd=str(cwd), text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(
+            command,
+            shell=True,
+            cwd=str(cwd),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
         parts: list[str] = []
         for line in proc.stdout:  # tee: capture and echo
             parts.append(line)
             print(line, end="", flush=True)
         proc.wait()
         return CommandResult(command, proc.returncode, "".join(parts), "")
-    proc = subprocess.run(command, shell=True, cwd=str(cwd),
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        command, shell=True, cwd=str(cwd), capture_output=True, text=True
+    )
     return CommandResult(command, proc.returncode, proc.stdout, proc.stderr)

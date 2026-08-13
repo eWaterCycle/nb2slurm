@@ -32,6 +32,17 @@ from .structure import Structure
 from .config import save_config, load_config
 from .runtime import on_hpc
 
-__all__ = ["Workflow", "Environment", "SSHConfig", "generate_key", "public_key",
-           "Settings", "Done", "Structure", "save_config", "load_config", "on_hpc"]
+__all__ = [
+    "Workflow",
+    "Environment",
+    "SSHConfig",
+    "generate_key",
+    "public_key",
+    "Settings",
+    "Done",
+    "Structure",
+    "save_config",
+    "load_config",
+    "on_hpc",
+]
 __version__ = "0.0.1.dev2"
