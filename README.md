@@ -28,7 +28,7 @@ separate template repository that you clone and fill in; it imports this package
 ## Install
 
 ```bash
-pip install -e ".[dev]"   # from a clone
+pip install nb2slurm
 ```
 
 Dependencies: `papermill`, `filelock`, `jinja2`, `paramiko`.
@@ -41,10 +41,10 @@ import nb2slurm
 wf = nb2slurm.Workflow(
     name="myproject",
     notebooks=[
-        "notebooks/0_settings.ipynb",   # first nb writes settings.json
-        "notebooks/1_analysis.ipynb",   # later nbs read settings.json
+        "notebooks/0_settings.ipynb",   # first notebook writes settings.json
+        "notebooks/1_computations.ipynb",   # all other notebooks read settings.json
     ],
-    kernel="myenv",
+    kernel="myenv",                     # allow for setting up an environment on HPC via a Python notebook
     varying=["region_id", "country"],   # what changes per job
     resources=dict(nodes=1, cpus=2, time="04:00:00"),
     conda_env="myenv",                  # activated in the SLURM job
@@ -59,13 +59,15 @@ wf = nb2slurm.Workflow(
 wf.build()                              # render scripts/ into the project
 
 # prove it works on one subject locally first:
-#   python scripts/run_workflow.py 123 NL
+#   python scripts/run_workflow.py NL north_1
 
-cfg = nb2slurm.SSHConfig(host="spider.surf.nl", user="me",
-                         remote_dir="/home/me/myproject", key_filename="~/.ssh/id_ed25519")
+cfg = nb2slurm.SSHConfig(host="spider.surfsara.nl", user="me",
+                         remote_dir="/home/me/myproject", 
+                         # key_filename="~/.ssh/id_ed25519"  # optional
+                         )
 
 wf.check(ssh=cfg)                                     # preflight: ready to submit?
-wf.submit([("123", "NL"), ("456", "DE")], ssh=cfg)   # sbatch one job per subject
+wf.submit([("NL", "north_1"), ("DE", "north_2")], ssh=cfg)   # sbatch one job per subject
 wf.status(ssh=cfg)                                     # parsed squeue
 wf.cancel(ssh=cfg)                                     # scancel what we submitted
 ```
@@ -78,6 +80,10 @@ you so you never touch conda or the command line:
 
 ```python
 import nb2slurm
+
+user = "me"
+cfg = nb2slurm.SSHConfig(host="spider.surfsara.nl", user=user,
+                         remote_dir=f"/home/{user}/myproject")
 
 env = nb2slurm.Environment(
     name="myenv",
@@ -177,11 +183,13 @@ flattens `jobs.json` into `jobs.txt` for them, so they stay short and readable.
 
 - The **first** notebook has a papermill `parameters` cell; nb2slurm injects the
   `varying` values plus `outdir`. It should call `nb2slurm.Settings.write(outdir, {...})`.
-- Every **later** notebook has a `parameters` cell with `settings_path`, and starts
+  This cell is given the tag: 'parameters'.
+- Every **later** notebook has a `parameters` cell with `settings_path`, and then starts
   with `settings = nb2slurm.Settings.load(settings_path)`.
 
 This keeps per-run details in one place (`settings.json`) and means only the first
-notebook is parameterised.
+notebook is parameterised with your varying variables. 
+The others still use the parameter tag for the JSON file path.
 
 For paths that genuinely differ between your laptop and the cluster (shared data
 dirs, etc.), branch on `nb2slurm.on_hpc()` — it detects a batch run via the SLURM
@@ -207,16 +215,22 @@ never drift apart.
 
 ```json
 {
-  "NL": { "123": ["ssp126", "ssp245"] },
-  "DE": { "789": ["ssp585"] }
+    "Netherlands":  {"north": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                    "south": ["green_climate", "climate_as_we_are", "heavy_industrialization"]
+                     },
+    "Germany":      {"north": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                     "south": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                     "east": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
+                     "west": ["green_climate", "climate_as_we_are", "heavy_industrialization"]
+                    }
 }
 ```
 
 With `varying=["country", "region", "scenario"]` this means:
 
 ```
-jobs:  (NL,123,ssp126)  (NL,123,ssp245)  (DE,789,ssp585)
-dirs:  output/NL/123/ssp126  output/NL/123/ssp245  output/DE/789/ssp585
+jobs:  (Netherlands,north,green_climate)  (Netherlands,south,climate_as_we_are)  (Germany,north,heavy_industrialization)
+dirs:  output/Netherlands/north/green_climate output/Netherlands/south/climate_as_we_are  output/Germany/north/heavy_industrialization
 ```
 
 **Format rules** (so you can generate the file however you like — a literal dict,
@@ -231,8 +245,8 @@ For example, in Python:
 
 ```python
 import json
-countries = {"NL": ["123", "456"], "DE": ["789"]}
-scenarios = ["ssp126", "ssp245", "ssp585"]
+countries = {"NL": ["north", "south"], "DE": ["north"]}
+scenarios = ["green", "normal", "worse"]
 jobs = {c: {r: scenarios for r in regions} for c, regions in countries.items()}
 json.dump(jobs, open("jobs.json", "w"), indent=2)
 ```
@@ -293,8 +307,7 @@ source of truth and never duplicate settings.
 `docs/walkthrough.ipynb` is the single-notebook narrative overview of the whole
 flow; the four above are the practical, modular version.
 
-## Development
+## Example Monte Carlo
 
-```bash
-python -m pytest -q
-```
+We also provide a [monte carlo example](docs/example_monte_carlo_pi/monte_carlo2slurm.ipynb).
+This serves as a basic example of what nb2slurm can do and provide a all-in-one notebook to run nb2slurm.
