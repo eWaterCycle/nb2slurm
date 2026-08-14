@@ -1,6 +1,6 @@
 """Create the conda environment + Jupyter kernel the workflow runs in.
 
-Most users of nb2slurm are not Linux/conda experts, but the generated SLURM job
+The expected users of nb2slurm are not Linux/conda experts, but the generated SLURM job
 does ``conda activate <env>`` and papermill needs a *registered Jupyter kernel*
 to execute the notebooks. This module writes an ``environment.yml`` and creates
 the environment + kernel on the cluster (or locally), so the user never touches

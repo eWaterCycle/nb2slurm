@@ -55,7 +55,7 @@ class Workflow:
     )  # raw shell lines run before the job, e.g. `module load Python/3.11`
     mounts: list[dict] = field(default_factory=list)
     runner_name: str = "run_workflow.py"
-    concurrency: int = 3
+    concurrency: int = 0
     output_dir: str = (
         "output"  # root for per-subject outputs (relative to project root)
     )
