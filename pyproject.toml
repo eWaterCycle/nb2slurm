@@ -45,5 +45,13 @@ path = "src/nb2slurm/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/nb2slurm"]
 
+[tool.ruff]
+target-version = "py39"
+# Markdown code blocks are hand-aligned for readability; keep the formatter out.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
