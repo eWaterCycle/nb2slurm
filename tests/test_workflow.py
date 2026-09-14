@@ -1,6 +1,5 @@
 import json
 import os
-from pathlib import Path
 
 import pytest
 
@@ -20,13 +19,17 @@ class FakeSSH:
     def run(self, command, cwd=None, stream=False):
         self.commands.append(command)
         ok = self.succeeds(command)
-        return CommandResult(command, 0 if ok else 1, "out" if ok else "", "" if ok else "err")
+        return CommandResult(
+            command, 0 if ok else 1, "out" if ok else "", "" if ok else "err"
+        )
 
 
 def make_wf(tmp_path, **kw):
     return Workflow(
         name="square",
-        notebooks=kw.pop("notebooks", ["notebooks/0_settings.ipynb", "notebooks/1_compute.ipynb"]),
+        notebooks=kw.pop(
+            "notebooks", ["notebooks/0_settings.ipynb", "notebooks/1_compute.ipynb"]
+        ),
         kernel=kw.pop("kernel", "python3"),
         varying=kw.pop("varying", ["item_id"]),
         resources=dict(nodes=1, cpus=2, time="00:05:00"),
@@ -38,7 +41,14 @@ def make_wf(tmp_path, **kw):
 def test_build_writes_all_scripts(tmp_path):
     wf = make_wf(tmp_path)
     written = wf.build()
-    for kind in ("runner", "slurm", "submit_batch", "submit_jobs", "cancel", "structure"):
+    for kind in (
+        "runner",
+        "slurm",
+        "submit_batch",
+        "submit_jobs",
+        "cancel",
+        "structure",
+    ):
         assert written[kind].exists()
     assert wf.runner_path.name == "run_workflow.py"
 
@@ -56,6 +66,7 @@ def test_runner_template_contents(tmp_path):
 
 def test_on_hpc_detects_batch_env(monkeypatch):
     from nb2slurm import on_hpc
+
     for var in ("NB2SLURM", "SLURM_JOB_ID", "SLURM_JOBID"):
         monkeypatch.delenv(var, raising=False)
     assert on_hpc() is False
@@ -65,6 +76,7 @@ def test_on_hpc_detects_batch_env(monkeypatch):
 
 def test_on_hpc_nb2slurm_sentinel(monkeypatch):
     from nb2slurm import on_hpc
+
     for var in ("NB2SLURM", "SLURM_JOB_ID", "SLURM_JOBID"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("NB2SLURM", "1")
@@ -87,14 +99,19 @@ def test_no_environment_no_conda_activate(tmp_path):
 
 
 def test_setup_lines_for_module_clusters(tmp_path):
-    wf = make_wf(tmp_path, kernel="cluster_kernel",
-                 setup=["module load 2023", "module load Python/3.11"])
+    wf = make_wf(
+        tmp_path,
+        kernel="cluster_kernel",
+        setup=["module load 2023", "module load Python/3.11"],
+    )
     wf.build()
     slurm = wf.slurm_path.read_text()
     assert "module load 2023" in slurm
     assert "module load Python/3.11" in slurm
     # setup runs before the workflow
-    assert slurm.index("module load Python/3.11") < slurm.index("python scripts/run_workflow.py")
+    assert slurm.index("module load Python/3.11") < slurm.index(
+        "python scripts/run_workflow.py"
+    )
 
 
 def test_per_notebook_kernel_override(tmp_path):
@@ -114,8 +131,11 @@ def test_per_notebook_kernel_override(tmp_path):
 
 def test_kernels_unknown_notebook_rejected(tmp_path):
     with pytest.raises(ValueError, match="kernels keys not in notebooks"):
-        make_wf(tmp_path, notebooks=["notebooks/a.ipynb"],
-                kernels={"notebooks/typo.ipynb": "myenv2"})
+        make_wf(
+            tmp_path,
+            notebooks=["notebooks/a.ipynb"],
+            kernels={"notebooks/typo.ipynb": "myenv2"},
+        )
 
 
 def test_slurm_mounts(tmp_path):
@@ -148,7 +168,9 @@ def test_output_paths_default_to_root(tmp_path, capsys):
 
 
 def test_output_paths_configurable(tmp_path, capsys):
-    wf = make_wf(tmp_path, output_dir="/scratch/me/out", done_csv="/scratch/me/done.csv")
+    wf = make_wf(
+        tmp_path, output_dir="/scratch/me/out", done_csv="/scratch/me/done.csv"
+    )
     wf.build()
     runner = wf.runner_path.read_text()
     assert 'Path("/scratch/me/out", *values.values())' in runner
@@ -168,13 +190,17 @@ def test_normalise_item_validation(tmp_path):
 
 
 def test_environment_yaml():
-    env = Environment(name="myenv", kernel="myenv", python="3.11",
-                      conda_packages=["xarray", "numpy"],
-                      pip_packages=["nb2slurm", "ewatercycle"])
+    env = Environment(
+        name="myenv",
+        kernel="myenv",
+        python="3.11",
+        conda_packages=["xarray", "numpy"],
+        pip_packages=["nb2slurm", "ewatercycle"],
+    )
     y = env.to_yaml()
     assert "name: myenv" in y
     assert "- python=3.11" in y
-    assert "- ipykernel" in y          # required for papermill
+    assert "- ipykernel" in y  # required for papermill
     assert "  - xarray" in y
     assert "      - ewatercycle" in y  # under pip:
 
@@ -191,7 +217,7 @@ def test_workflow_writes_environment_and_validates(tmp_path):
     wf = make_wf(tmp_path, kernel="myenv", environment=env)
     written = wf.build()
     assert written["environment"].exists()
-    assert wf.conda_env == "myenv"          # derived from environment
+    assert wf.conda_env == "myenv"  # derived from environment
     slurm = wf.slurm_path.read_text()
     assert "conda activate myenv" in slurm
 
@@ -253,13 +279,13 @@ def test_structure_paths_and_build(tmp_path):
     struct = Structure(SPEC)
     rels = set(struct.paths(tmp_path))
     assert rels == {"NL/123/ssp126", "NL/123/ssp245", "DE/789/ssp585"}
-    assert not (tmp_path / "NL").exists()          # paths() does no I/O
+    assert not (tmp_path / "NL").exists()  # paths() does no I/O
 
     paths = struct.build(tmp_path)
     for rel, p in paths.items():
         assert p.is_dir()
         assert p == tmp_path.joinpath(*rel.split("/"))
-    struct.build(tmp_path)                          # idempotent
+    struct.build(tmp_path)  # idempotent
 
 
 def test_structure_from_json(tmp_path):
@@ -279,7 +305,7 @@ def test_submit_reads_jobs_json_by_default(tmp_path, capsys):
     wf = make_wf(tmp_path, varying=["country", "region", "scenario"])
     wf.build()
     (tmp_path / "jobs.json").write_text(json.dumps(SPEC))
-    wf.submit(dry_run=True)                          # no items -> reads jobs.json
+    wf.submit(dry_run=True)  # no items -> reads jobs.json
     out = capsys.readouterr().out
     assert "--job-name=NL_123_ssp126" in out
     assert "output/DE/789/ssp585/DE_789_ssp585.out" in out
@@ -297,7 +323,7 @@ def test_build_generates_jobs_txt_from_json(tmp_path):
 
 
 def test_build_skips_jobs_txt_without_json(tmp_path):
-    wf = make_wf(tmp_path)               # no jobs.json present
+    wf = make_wf(tmp_path)  # no jobs.json present
     written = wf.build()
     assert "jobs_txt" not in written
 
@@ -327,8 +353,13 @@ def test_build_outputs_from_json(tmp_path):
 
 def _ssh():
     from nb2slurm import SSHConfig
-    return SSHConfig(host="hpc", user="me", remote_dir="/home/me/proj",
-                     key_filename="~/.ssh/id_ed25519")
+
+    return SSHConfig(
+        host="hpc",
+        user="me",
+        remote_dir="/home/me/proj",
+        key_filename="~/.ssh/id_ed25519",
+    )
 
 
 def test_push_uploads_source_not_outputs(tmp_path):
@@ -340,8 +371,8 @@ def test_push_uploads_source_not_outputs(tmp_path):
     # outputs are excluded so push can't wipe remote results
     for ex in ("output", "done", ".git"):
         assert ex in cmd
-    assert cmd[-1] == "me@hpc:/home/me/proj/"        # dst is the remote project root
-    assert cmd[-2].endswith("/")                      # src is the local project
+    assert cmd[-1] == "me@hpc:/home/me/proj/"  # dst is the remote project root
+    assert cmd[-2].endswith("/")  # src is the local project
 
 
 def test_pull_fetches_only_outputs(tmp_path):
@@ -359,11 +390,19 @@ def test_pull_fetches_only_outputs(tmp_path):
 
 def test_config_save_load_roundtrip(tmp_path):
     from nb2slurm import save_config, load_config, SSHConfig
+
     env = Environment(name="e", kernel="e", conda_packages=["xarray"])
-    wf = make_wf(tmp_path, kernel="e", varying=["country", "region"],
-                 jobs_json="jobs.json", environment=env, conda_env="e")
-    cfg = SSHConfig(host="h", user="u", remote_dir="/r",
-                    key_filename="k", password="secret")
+    wf = make_wf(
+        tmp_path,
+        kernel="e",
+        varying=["country", "region"],
+        jobs_json="jobs.json",
+        environment=env,
+        conda_env="e",
+    )
+    cfg = SSHConfig(
+        host="h", user="u", remote_dir="/r", key_filename="k", password="secret"
+    )
 
     path = save_config(tmp_path / "control_config.json", workflow=wf, ssh=cfg)
 
@@ -383,8 +422,9 @@ def test_config_save_load_roundtrip(tmp_path):
 
 def test_config_load_without_ssh(tmp_path):
     from nb2slurm import save_config, load_config
+
     wf = make_wf(tmp_path)
-    path = save_config(tmp_path / "c.json", workflow=wf)   # no ssh
+    path = save_config(tmp_path / "c.json", workflow=wf)  # no ssh
     wf2, cfg2 = load_config(path)
     assert cfg2 is None
     assert wf2.name == wf.name

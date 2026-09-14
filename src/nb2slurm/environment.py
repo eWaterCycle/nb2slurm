@@ -1,6 +1,6 @@
 """Create the conda environment + Jupyter kernel the workflow runs in.
 
-Most users of nb2slurm are not Linux/conda experts, but the generated SLURM job
+The expected users of nb2slurm are not Linux/conda experts, but the generated SLURM job
 does ``conda activate <env>`` and papermill needs a *registered Jupyter kernel*
 to execute the notebooks. This module writes an ``environment.yml`` and creates
 the environment + kernel on the cluster (or locally), so the user never touches
@@ -29,11 +29,19 @@ from .ssh import CommandResult, SSHConfig, run_shell
 
 @dataclass
 class Environment:
+    """A conda environment + Jupyter kernel to create for the workflow."""
+
+    #: conda environment name (``conda activate <name>`` in the job)
     name: str
+    #: Jupyter kernel to register; must match ``Workflow(kernel=...)``
     kernel: str
+    #: Python version for the environment
     python: str = "3.11"
+    #: conda channels, in priority order
     channels: list[str] = field(default_factory=lambda: ["conda-forge"])
+    #: packages installed with conda/mamba
     conda_packages: list[str] = field(default_factory=list)
+    #: packages installed with pip (nb2slurm itself is needed in the job)
     pip_packages: list[str] = field(default_factory=lambda: ["nb2slurm"])
 
     def to_yaml(self) -> str:
@@ -50,7 +58,9 @@ class Environment:
             lines += [f"      - {p}" for p in self.pip_packages]
         return "\n".join(lines) + "\n"
 
-    def write(self, project_dir: str | Path = ".", filename: str = "environment.yml") -> Path:
+    def write(
+        self, project_dir: str | Path = ".", filename: str = "environment.yml"
+    ) -> Path:
         """Write the ``environment.yml`` into the project directory."""
         path = Path(project_dir) / filename
         path.write_text(self.to_yaml(), encoding="utf-8")
@@ -114,7 +124,9 @@ class Environment:
         Safe to call when nothing is there yet (a missing env/kernel is ignored).
         Use it to recover from a half-built env or to force a clean rebuild.
         """
-        return run_shell(self._remove_command(), ssh, str(project_dir), stream=stream).check()
+        return run_shell(
+            self._remove_command(), ssh, str(project_dir), stream=stream
+        ).check()
 
     def create(
         self,

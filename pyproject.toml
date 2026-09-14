@@ -35,15 +35,30 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+docs = [
+    "sphinx>=7.2",
+    "myst-nb>=1.1",
+    "furo>=2024.1.29",
+    "sphinx-copybutton>=0.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/eWaterCycle/nb2slurm"
+Documentation = "https://nb2slurm.readthedocs.io"
 
 [tool.hatch.version]
 path = "src/nb2slurm/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nb2slurm"]
+
+[tool.ruff]
+target-version = "py39"
+# Markdown code blocks are hand-aligned for readability; keep the formatter out.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

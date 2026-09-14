@@ -24,13 +24,13 @@ reach them only by submitting a job.
 
 ### SLURM (the scheduler)
 **SLURM** is the program that decides which job runs on which compute node and
-when. You hand it a job that says *"run this script; I need 1 node, 2 CPUs, 4
+when. You hand it a job that says *"run this script; I need 2 CPUs on 1 node, 4
 hours"* and it queues it. When resources are free, it runs. Key ideas:
 
 - **`sbatch`** — submit a job (nb2slurm calls this for you).
 - **`squeue`** — see what's queued/running (`wf.status()`).
 - **`scancel`** — cancel jobs (`wf.cancel()`).
-- A job that asks for less time/memory usually starts sooner.
+- **A job that asks for less time/memory usually starts sooner.**
 
 ### Resources
 Every job declares what it needs. The common ones (set via `Workflow(resources=...)`):
@@ -56,6 +56,8 @@ papermill (which runs your notebooks) needs that environment registered as a
 **Jupyter kernel** — a named entry papermill can pick. nb2slurm creates both for
 you:
 
+**NOTE** the environment has the same name as the kernel, that can be changed, but is kept for simplicity.
+
 ```python
 from nb2slurm import Environment
 env = Environment(name="myenv", kernel="myenv",
@@ -77,6 +79,8 @@ HPCs have more than one place to store files, and they behave differently:
 
 This is why `output_dir` and `done_csv` are configurable in nb2slurm: point big
 outputs at scratch/project, keep your notebooks in home.
+
+Every HPC has its own filesystem and the user is responsible for knowing how it works.
 
 ### Data mounts (rclone)
 Big shared datasets (climate data, Caravan) often live on remote storage that is
@@ -112,8 +116,11 @@ You stay in a notebook and write Python:
 ```python
 from nb2slurm import Workflow, Environment, SSHConfig
 
-cfg = SSHConfig(host="spider.surf.nl", user="me",
-                remote_dir="/home/me/myproject", key_filename="~/.ssh/id_ed25519")
+username = "me"
+
+cfg = SSHConfig(host="spider.surf.nl", user=username,
+                remote_dir=f"/home/{username}/myproject",
+                key_filename="~/.ssh/id_ed25519")
 cfg.test_connection()            # quick OK/FAIL check before anything else
 
 env = Environment(name="myenv", kernel="myenv", conda_packages=["xarray"])
@@ -122,7 +129,7 @@ wf  = Workflow(name="myproject", notebooks=[...], kernel="myenv",
 
 wf.create_environment(ssh=cfg)   # one-time: build env + kernel on the HPC
 wf.build()                       # write the SLURM/runner scripts
-wf.submit(["123", "456"], ssh=cfg)  # sbatch, behind the scenes
+wf.submit(["region_1", "region_2"], ssh=cfg)  # sbatch, behind the scenes
 wf.status(ssh=cfg)               # squeue, behind the scenes
 ```
 

@@ -47,13 +47,21 @@ class SSHConfig:
       need neither here, and rsync (``push``/``pull``) also works without prompts.
     """
 
+    #: login node hostname
     host: str
+    #: your username on the cluster
     user: str
+    #: the project directory on the cluster; commands run from there
     remote_dir: str
+    #: SSH port
     port: int = 22
+    #: private key path, e.g. ``~/.ssh/id_ed25519`` (``~`` is expanded for you)
     key_filename: Optional[str] = None
+    #: account password, if your cluster uses one (never written to disk by save_config)
     password: Optional[str] = None
+    #: passphrase unlocking an encrypted private key (never written to disk either)
     passphrase: Optional[str] = None
+    #: extra keyword arguments passed straight to ``paramiko.SSHClient.connect``
     extra_connect_kwargs: dict = field(default_factory=dict)
 
     def key_path(self) -> Optional[str]:
@@ -76,7 +84,11 @@ class SSHConfig:
     def rsync_target(self, subpath: str = "") -> str:
         """A ``user@host:remote_dir/<subpath>`` spec for rsync."""
         base = self.remote_dir.rstrip("/")
-        return f"{self.user}@{self.host}:{base}/{subpath}" if subpath else f"{self.user}@{self.host}:{base}/"
+        return (
+            f"{self.user}@{self.host}:{base}/{subpath}"
+            if subpath
+            else f"{self.user}@{self.host}:{base}/"
+        )
 
     def _connect(self):
         """Open an authenticated paramiko client.
@@ -129,7 +141,12 @@ class SSHConfig:
         """
         # show the port only when it's non-default, so the message reads like a
         # normal ssh target (host:22 looks like a connection string and confuses)
-        target = self.user + "@" + self.host + (f" (port {self.port})" if self.port != 22 else "")
+        target = (
+            self.user
+            + "@"
+            + self.host
+            + (f" (port {self.port})" if self.port != 22 else "")
+        )
         try:
             res = self.run(command, cwd="~")  # ~, not remote_dir (may not exist yet)
         except Exception as e:
@@ -138,11 +155,14 @@ class SSHConfig:
         if res.exit_status == 0:
             print(f"OK: connected to {target}\n{res.stdout.strip()}")
             return True
-        print(f"FAIL: connected to {target} but the command failed\n  {res.stderr.strip()}")
+        print(
+            f"FAIL: connected to {target} but the command failed\n  {res.stderr.strip()}"
+        )
         return False
 
-    def run(self, command: str, cwd: Optional[str] = None,
-            stream: bool = False) -> CommandResult:
+    def run(
+        self, command: str, cwd: Optional[str] = None, stream: bool = False
+    ) -> CommandResult:
         """Run a single command on the cluster and return its result.
 
         Output is drained continuously while the command runs, so a chatty
@@ -215,25 +235,37 @@ def _make_keypair(priv: Path, key_type: str, bits: int, comment: Optional[str]) 
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
         key = Ed25519PrivateKey.generate()
-        priv.write_bytes(key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.OpenSSH,
-            serialization.NoEncryption(),
-        ))
-        pub = key.public_key().public_bytes(
-            serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH
-        ).decode()
+        priv.write_bytes(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            )
+        )
+        pub = (
+            key.public_key()
+            .public_bytes(
+                serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH
+            )
+            .decode()
+        )
         return f"{pub} {comment or ''}".strip()
 
     import paramiko  # lazy: keep the package importable without a crypto backend
+
     key = paramiko.RSAKey.generate(bits)
     key.write_private_key_file(str(priv))
     return f"ssh-rsa {key.get_base64()} {comment or ''}".strip()
 
 
-def generate_key(path: Optional[str] = None, key_type: str = "rsa",
-                 bits: int = 4096, comment: Optional[str] = None,
-                 overwrite: bool = False, show: bool = True) -> Tuple[Path, Path]:
+def generate_key(
+    path: Optional[str] = None,
+    key_type: str = "rsa",
+    bits: int = 4096,
+    comment: Optional[str] = None,
+    overwrite: bool = False,
+    show: bool = True,
+) -> Tuple[Path, Path]:
     """Create an SSH keypair at ``path`` (+ ``<path>.pub``).
 
     ``key_type`` is ``"rsa"`` (default, ``bits`` wide) or ``"ed25519"`` — the
@@ -261,7 +293,9 @@ def generate_key(path: Optional[str] = None, key_type: str = "rsa",
     pub = _pub_path(path)
     if priv.exists() and not overwrite:
         if show:
-            print(f"key already exists at {priv}; its public key is:\n\n{public_key(path)}")
+            print(
+                f"key already exists at {priv}; its public key is:\n\n{public_key(path)}"
+            )
         return priv, pub
     priv.parent.mkdir(parents=True, exist_ok=True)
 
@@ -282,8 +316,9 @@ def generate_key(path: Optional[str] = None, key_type: str = "rsa",
     return priv, pub
 
 
-def run_shell(command: str, ssh: Optional[SSHConfig] = None,
-              cwd: str = ".", stream: bool = False) -> CommandResult:
+def run_shell(
+    command: str, ssh: Optional[SSHConfig] = None, cwd: str = ".", stream: bool = False
+) -> CommandResult:
     """Run a shell command on the cluster (via ``ssh``) or locally (subprocess).
 
     Shared by Workflow and Environment so the ssh-vs-local branch lives in one
@@ -292,14 +327,21 @@ def run_shell(command: str, ssh: Optional[SSHConfig] = None,
     if ssh is not None:
         return ssh.run(command, stream=stream)
     if stream:
-        proc = subprocess.Popen(command, shell=True, cwd=str(cwd), text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(
+            command,
+            shell=True,
+            cwd=str(cwd),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
         parts: list[str] = []
         for line in proc.stdout:  # tee: capture and echo
             parts.append(line)
             print(line, end="", flush=True)
         proc.wait()
         return CommandResult(command, proc.returncode, "".join(parts), "")
-    proc = subprocess.run(command, shell=True, cwd=str(cwd),
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        command, shell=True, cwd=str(cwd), capture_output=True, text=True
+    )
     return CommandResult(command, proc.returncode, proc.stdout, proc.stderr)

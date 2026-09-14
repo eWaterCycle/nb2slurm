@@ -8,7 +8,7 @@ from a notebook with no command line:
     wf = nb2slurm.Workflow(
         name="square",
         notebooks=["notebooks/0_settings.ipynb", "notebooks/1_compute.ipynb"],
-        kernel="python3",
+        # kernel="my_environment",
         varying=["item_id"],
         resources=dict(nodes=1, cpus=2, time="00:10:00"),
     )
@@ -32,6 +32,17 @@ from .structure import Structure
 from .config import save_config, load_config
 from .runtime import on_hpc
 
-__all__ = ["Workflow", "Environment", "SSHConfig", "generate_key", "public_key",
-           "Settings", "Done", "Structure", "save_config", "load_config", "on_hpc"]
+__all__ = [
+    "Workflow",
+    "Environment",
+    "SSHConfig",
+    "generate_key",
+    "public_key",
+    "Settings",
+    "Done",
+    "Structure",
+    "save_config",
+    "load_config",
+    "on_hpc",
+]
 __version__ = "0.0.1.dev2"

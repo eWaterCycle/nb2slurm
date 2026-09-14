@@ -1,7 +1,6 @@
 """Detect whether the current notebook is running under nb2slurm on a cluster.
 
-Checking ``Path.home()`` for a username is fragile (breaks for other users, can't
-tell a cloud VM from a laptop). Instead we look at environment variables that are
+We will look at environment variables that are
 only present in a batch job:
 
 * the ``SLURM_*`` variables SLURM sets in every job, and
@@ -13,9 +12,9 @@ interactive and batch runs — machine-specific data paths, skipping ``!pip inst
 
     import nb2slurm
     if nb2slurm.on_hpc():
-        data_dir = "/project/ewater/Data"
+        data_dir = "/project/Data"
     else:
-        data_dir = "/data/shared"
+        data_dir = "/data_dir"
 
 It also cleans up importing a helper from ``scripts/``. On the cluster the job
 runs from the project root, so ``from scripts.foo import bar`` just works; run
@@ -39,5 +38,5 @@ _BATCH_ENV_VARS = ("NB2SLURM", "SLURM_JOB_ID", "SLURM_JOBID")
 
 
 def on_hpc() -> bool:
-    """Return True if running inside an nb2slurm/SLURM batch job."""
+    """Return True if running inside a nb2slurm/SLURM batch job."""
     return any(var in os.environ for var in _BATCH_ENV_VARS)
