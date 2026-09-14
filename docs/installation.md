@@ -38,10 +38,6 @@ you before the first submit.
 
 ## Development install
 
-```bash
-git clone https://github.com/eWaterCycle/nb2slurm
-cd nb2slurm
-pip install -e ".[dev,docs]"
-pytest
-sphinx-build -b html docs docs/_build/html
-```
+Working on nb2slurm itself rather than using it? The clone, test, lint and
+docs-build steps live in the
+[README](https://github.com/eWaterCycle/nb2slurm#development).
