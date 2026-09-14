@@ -14,7 +14,7 @@ wf = nb2slurm.Workflow(
         "notebooks/1_computations.ipynb",  # all other notebooks read settings.json
     ],
     kernel="myenv",                        # a Jupyter kernel on the cluster
-    varying=["region_id", "country"],      # what changes per job
+    varying=["country", "region"],         # what changes per job (name these yourself)
     resources=dict(nodes=1, cpus=2, time="04:00:00"),
     conda_env="myenv",                     # activated in the SLURM job
     mounts=[                               # optional rclone mounts
@@ -36,10 +36,18 @@ every option.
 wf.build()      # render scripts/ into the project
 ```
 
-Then run one subject locally before involving the cluster:
+Before involving the cluster, prove the chain works for one subject. The simplest
+way is the one you already know: **open your notebooks in Jupyter and run them
+top to bottom**, in order. Their `parameters` cells hold ordinary defaults, so
+`0_settings.ipynb` writes a `settings.json` the later notebooks read, exactly as
+they will on the cluster. If the chain works in Jupyter, it will work under
+SLURM — nb2slurm only swaps in a different subject and `outdir` per job.
+
+To exercise the generated driver itself — skip-if-done, the settings hand-off,
+the notebook order — run it for one subject instead:
 
 ```bash
-python scripts/run_workflow.py NL north_1
+python scripts/run_workflow.py NL north      # values in varying order
 ```
 
 What `build()` writes is listed in [Generated files](generated-files.md).
@@ -67,7 +75,7 @@ report back as a list instead.
 
 ```python
 wf.submit(ssh=cfg)                                  # reads jobs.json: one job per leaf
-wf.submit([("NL", "north_1"), ("DE", "north_2")], ssh=cfg)   # or an explicit subset
+wf.submit([("NL", "north"), ("DE", "south")], ssh=cfg)       # or an explicit subset
 wf.status(ssh=cfg)                                  # parsed squeue
 wf.cancel(ssh=cfg)                                  # scancel what we submitted
 ```

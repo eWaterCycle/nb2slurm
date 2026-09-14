@@ -16,14 +16,30 @@ cfg = nb2slurm.SSHConfig(host="spider.surfsara.nl", user=user,
 env = nb2slurm.Environment(
     name="myenv",
     kernel="myenv",                        # must match Workflow(kernel=...)
-    conda_packages=["xarray", "numpy"],
-    pip_packages=["nb2slurm", "ewatercycle"],
+    conda_packages=["xarray", "numpy"],        # EXAMPLE — your notebooks' imports
+    pip_packages=["nb2slurm", "ewatercycle"],  # EXAMPLE — keep nb2slurm, swap the rest
 )
 
 wf = nb2slurm.Workflow(name="myproject", notebooks=[...], kernel="myenv",
                        varying=["region_id"], environment=env)
 
 wf.create_environment(ssh=cfg)   # one-time: env + kernel on the HPC
+```
+
+```{admonition} The package lists are an example, not a requirement
+:class: important
+`xarray`, `numpy` and `ewatercycle` are just this example's stack — nb2slurm is
+domain-agnostic and has nothing to do with hydrology. List whatever **your**
+notebooks import.
+
+Two things you don't have to think about: `python` defaults to `3.11` (set
+`python="3.12"` to change it), and `ipykernel` is always added for you, since
+papermill needs the kernel to exist.
+
+The one entry to keep is **`nb2slurm` itself** — the generated runner and your
+notebooks import it inside the job. It is the default value of `pip_packages`, so
+it is easy to lose by accident: the moment you pass your own `pip_packages` list,
+you replace that default and must include `nb2slurm` again.
 ```
 
 Passing `environment=env` keeps the names in sync (it raises if `kernel` or

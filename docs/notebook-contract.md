@@ -5,31 +5,50 @@ one chain per subject. Two small rules make that work.
 
 ## 1. The first notebook writes the settings
 
-It has a cell tagged `parameters`. nb2slurm injects the `varying` values plus
-`outdir` into that cell, and the notebook writes them to `settings.json`:
+It needs one cell tagged `parameters`. **The tag is the mechanism**, not the
+contents: papermill finds the tagged cell and inserts a new cell directly after
+it that re-assigns those variables, so the injected values win. In JupyterLab you
+add it from *Property Inspector → Cell Tags*; in VS Code, *Add Cell Tag*. Without
+the tag, nothing is injected and every job runs identical work.
+
+In that cell, declare **one variable per entry in your `varying` list, named
+exactly as you named it there**, plus `outdir`.
+
+The names below are only this page's example. If your workflow says
+`varying=["basin", "model"]`, then your cell declares `basin` and `model` —
+nb2slurm has no opinion about what you call them:
 
 ```python
-# cell tagged: parameters
-region_id = "north_1"
+# cell tagged: parameters        <- example, for varying=["country", "region"]
 country = "NL"
-outdir = "output/NL/north_1"
+region = "north"
+outdir = "output/NL/north"
 ```
+
+The values you type there are **defaults for running the notebook yourself**, and
+nothing more. Open it in Jupyter and it runs for that one subject; on the cluster
+papermill overrides all of them per job, so these literals never reach a SLURM
+run. Pick whatever makes a sensible local test.
+
+Then write them out, so the rest of the chain can read them back:
 
 ```python
 import nb2slurm
-nb2slurm.Settings.write(outdir, {"region_id": region_id, "country": country, "outdir": outdir})
+nb2slurm.Settings.write(outdir, {"country": country, "region": region, "outdir": outdir})
 ```
 
-`outdir` is handed to the notebook by the generated runner, so you never build
-paths yourself — the output tree comes from [jobs.json](jobs-json.md).
+`outdir` is handed in by the generated runner — you never build paths yourself.
+The output tree comes from [jobs.json](jobs-json.md).
 
 ## 2. Every later notebook reads it
 
-Each has a `parameters` cell with just `settings_path`, and loads it:
+Each has a `parameters` cell with just `settings_path`, and loads it. Same rule:
+the tag matters, the literal is only a local default that the runner overrides
+with this job's real path.
 
 ```python
 # cell tagged: parameters
-settings_path = "output/NL/north_1/settings.json"
+settings_path = "output/NL/north/settings.json"
 ```
 
 ```python
