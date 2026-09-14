@@ -45,4 +45,4 @@ __all__ = [
     "load_config",
     "on_hpc",
 ]
-__version__ = "0.0.1.dev2"
+__version__ = "0.1.0"

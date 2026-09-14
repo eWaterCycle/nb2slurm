@@ -28,11 +28,11 @@ job.
 ## Install
 
 ```bash
-pip install --pre nb2slurm
+pip install nb2slurm
 ```
 
-Python 3.9+. `--pre` is needed while only pre-releases are published. You also
-need `rsync` locally for the file transfer helpers, and SSH access to a cluster.
+Python 3.9+. You also need `rsync` locally for the file transfer helpers, and
+SSH access to a cluster.
 See [Installation](https://nb2slurm.readthedocs.io/en/latest/installation.html)
 for the cluster-side requirements.
 

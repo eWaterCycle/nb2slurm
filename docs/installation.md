@@ -1,12 +1,11 @@
 # Installation
 
 ```bash
-pip install --pre nb2slurm
+pip install nb2slurm
 ```
 
 Python 3.9 or newer. The dependencies (`papermill`, `filelock`, `jinja2`,
-`paramiko`) are installed with it. Only pre-releases are published so far, so
-`--pre` is required until the first stable version.
+`paramiko`) are installed with it.
 
 ## What you need besides the package
 
