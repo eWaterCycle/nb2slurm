@@ -4,9 +4,10 @@ nb2slurm takes a notebook workflow that runs for **one subject** (one catchment,
 one region, one number, ...) and generates everything needed to run it for **many
 subjects** on a SLURM HPC — driven entirely from a notebook, no command line.
 
-```{admonition} Still in development
-:class: warning
-Nothing is guaranteed yet. The Monte Carlo example works; the API can still change.
+```{admonition} Pre-1.0
+:class: note
+nb2slurm works end to end and is released on PyPI, but it is young: the API can
+still change in a minor release. Pin the version you depend on.
 ```
 
 It is both a package and a scaffolder:

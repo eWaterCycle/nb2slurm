@@ -10,8 +10,9 @@ region, one number — and run it for **many subjects** on a SLURM cluster, driv
 entirely from a notebook. No command line, no rewriting your science into a
 pipeline DSL.
 
-> **Status: alpha.** The Monte Carlo example works end to end, but the API can
-> still change between versions. Pin what you install.
+> **Pre-1.0.** nb2slurm works end to end and is released on PyPI, but it is
+> young: the API can still change in a minor release. Pin the version you
+> depend on.
 
 ## The problem
 
