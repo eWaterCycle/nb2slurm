@@ -32,9 +32,18 @@ Passing `environment=env` keeps the names in sync (it raises if `kernel` or
 
 {meth}`~nb2slurm.Workflow.create_environment` uses `mamba` when available, falls
 back to `conda`, and registers the kernel through `ipykernel`. Omit `ssh=` to
-build the same environment locally.
-{meth}`~nb2slurm.Workflow.remove_environment` deletes it again — handy to recover
-from a half-built environment.
+build the same environment locally. It runs **non-interactively** (it never
+stalls on a conda `[Y/n]` prompt over SSH) and **streams** conda/mamba output
+live, so a multi-minute solve doesn't look like a hang.
+
+It is also idempotent: re-running *updates the environment in place*. To recover
+from a half-built environment, or to force a clean slate:
+
+```python
+wf.environment.exists(ssh=cfg)                  # True/False, changes nothing
+wf.remove_environment(ssh=cfg)                  # delete the env + its Jupyter kernel
+wf.create_environment(ssh=cfg, overwrite=True)  # remove-then-create in one go
+```
 
 ## 2. Use an environment the cluster already has
 

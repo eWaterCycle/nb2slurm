@@ -33,9 +33,18 @@ class CommandResult:
 class SSHConfig:
     """Connection details for the HPC login node.
 
-    Provide either ``key_filename`` or ``password`` (or rely on an agent/known
-    config). ``remote_dir`` is the project directory on the cluster that the
-    generated scripts live in; commands are run from there.
+    Provide a ``key_filename`` (or rely on an agent/known config). ``remote_dir``
+    is the project directory on the cluster that the generated scripts live in;
+    commands are run from there.
+
+    Auth notes:
+
+    * ``passphrase`` decrypts a passphrase-protected private key (this is what
+      Snellius and most clusters use — the "password" you type is your key's
+      passphrase, not a server account password).
+    * ``password`` is for actual password authentication (rare on HPC).
+    * Best of all is loading the key into ``ssh-agent`` (``ssh-add``): then you
+      need neither here, and rsync (``push``/``pull``) also works without prompts.
     """
 
     #: login node hostname
@@ -46,10 +55,12 @@ class SSHConfig:
     remote_dir: str
     #: SSH port
     port: int = 22
-    #: private key path, e.g. ``~/.ssh/id_rsa`` (``~`` is expanded for you)
+    #: private key path, e.g. ``~/.ssh/id_ed25519`` (``~`` is expanded for you)
     key_filename: Optional[str] = None
-    #: password, if your cluster needs one (never written to disk by save_config)
+    #: account password, if your cluster uses one (never written to disk by save_config)
     password: Optional[str] = None
+    #: passphrase unlocking an encrypted private key (never written to disk either)
+    passphrase: Optional[str] = None
     #: extra keyword arguments passed straight to ``paramiko.SSHClient.connect``
     extra_connect_kwargs: dict = field(default_factory=dict)
 
@@ -79,6 +90,76 @@ class SSHConfig:
             else f"{self.user}@{self.host}:{base}/"
         )
 
+    def _connect(self):
+        """Open an authenticated paramiko client.
+
+        Translates paramiko's encrypted-key error into a clear hint: if the key
+        needs a passphrase and none got it unlocked, tell the user to pass
+        ``passphrase=`` (or use ssh-agent) rather than surfacing a cryptic error.
+        """
+        import paramiko  # imported lazily so the package imports without a cluster
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # bound the connect so an unreachable host fails fast instead of hanging
+        # forever; the user can override via extra_connect_kwargs.
+        opts = {"timeout": 30, "auth_timeout": 30, "banner_timeout": 30}
+        if self.key_filename:
+            # An explicit key means "use this one" (plus ssh-agent). Don't also
+            # scan ~/.ssh for other default keys: a stray/legacy id_dsa there makes
+            # paramiko crash on modern cryptography backends
+            # ("q must be exactly 160, 224, or 256 bits long"). Agent use stays on.
+            opts["look_for_keys"] = False
+        opts.update(self.extra_connect_kwargs)
+        try:
+            client.connect(
+                hostname=self.host,
+                port=self.port,
+                username=self.user,
+                key_filename=self.key_path(),
+                password=self.password,
+                passphrase=self.passphrase,
+                **opts,
+            )
+        except paramiko.PasswordRequiredException as e:
+            client.close()
+            raise paramiko.PasswordRequiredException(
+                f"private key {self.key_path()!r} is encrypted with a passphrase. "
+                "Pass it with SSHConfig(passphrase=...), or (recommended) load the "
+                "key into ssh-agent first with `ssh-add` so rsync push/pull work too."
+            ) from e
+        except Exception:
+            client.close()
+            raise
+        return client
+
+    def test_connection(self, command: str = "hostname && whoami") -> bool:
+        """Try to connect and run a trivial command; print a clear ok/fail.
+
+        A quick first check before push/submit. Returns True on success. On an
+        encrypted key it prints the passphrase hint from ``_connect``.
+        """
+        # show the port only when it's non-default, so the message reads like a
+        # normal ssh target (host:22 looks like a connection string and confuses)
+        target = (
+            self.user
+            + "@"
+            + self.host
+            + (f" (port {self.port})" if self.port != 22 else "")
+        )
+        try:
+            res = self.run(command, cwd="~")  # ~, not remote_dir (may not exist yet)
+        except Exception as e:
+            print(f"FAIL: could not connect to {target}\n  {type(e).__name__}: {e}")
+            return False
+        if res.exit_status == 0:
+            print(f"OK: connected to {target}\n{res.stdout.strip()}")
+            return True
+        print(
+            f"FAIL: connected to {target} but the command failed\n  {res.stderr.strip()}"
+        )
+        return False
+
     def run(
         self, command: str, cwd: Optional[str] = None, stream: bool = False
     ) -> CommandResult:
@@ -90,22 +171,11 @@ class SSHConfig:
         ``stream=True`` to also echo output live — useful for long-running
         builds where you'd otherwise see nothing until they finish.
         """
-        import paramiko  # imported lazily so the package imports without a cluster
-
         cwd = cwd or self.remote_dir
         wrapped = f"cd {cwd} && {command}" if cwd else command
 
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self._connect()
         try:
-            client.connect(
-                hostname=self.host,
-                port=self.port,
-                username=self.user,
-                key_filename=self.key_path(),
-                password=self.password,
-                **self.extra_connect_kwargs,
-            )
             chan = client.get_transport().open_session()
             chan.exec_command(wrapped)
 
@@ -156,14 +226,52 @@ def public_key(path: str = "~/.ssh/id_rsa") -> str:
     return _pub_path(path).read_text().strip()
 
 
+def _make_keypair(priv: Path, key_type: str, bits: int, comment: Optional[str]) -> str:
+    """Write the private key to ``priv`` and return its public key line."""
+    if key_type == "ed25519":
+        # paramiko can load but not *generate* ed25519, so use cryptography
+        # (a paramiko dependency) and serialize in OpenSSH format.
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        key = Ed25519PrivateKey.generate()
+        priv.write_bytes(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            )
+        )
+        pub = (
+            key.public_key()
+            .public_bytes(
+                serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH
+            )
+            .decode()
+        )
+        return f"{pub} {comment or ''}".strip()
+
+    import paramiko  # lazy: keep the package importable without a crypto backend
+
+    key = paramiko.RSAKey.generate(bits)
+    key.write_private_key_file(str(priv))
+    return f"ssh-rsa {key.get_base64()} {comment or ''}".strip()
+
+
 def generate_key(
-    path: str = "~/.ssh/id_rsa",
+    path: Optional[str] = None,
+    key_type: str = "rsa",
     bits: int = 4096,
     comment: Optional[str] = None,
     overwrite: bool = False,
     show: bool = True,
 ) -> Tuple[Path, Path]:
-    """Create an RSA SSH keypair at ``path`` (+ ``<path>.pub``).
+    """Create an SSH keypair at ``path`` (+ ``<path>.pub``).
+
+    ``key_type`` is ``"rsa"`` (default, ``bits`` wide) or ``"ed25519"`` — the
+    modern, fixed-size type, recommended as it sidesteps the legacy RSA/DSA
+    baggage some setups trip over. When ``path`` is omitted it defaults to
+    ``~/.ssh/id_rsa`` or ``~/.ssh/id_ed25519`` to match ``key_type``.
 
     Returns ``(private_path, public_path)``. The private key is written 0600 and
     the public key in ``authorized_keys`` format. An existing key is left alone
@@ -175,7 +283,11 @@ def generate_key(
     you can copy it into your cluster's key-upload page (or its
     ``~/.ssh/authorized_keys``); ``nb2slurm.public_key(path)`` reprints it later.
     """
-    import paramiko  # lazy: keep the package importable without a crypto backend
+    key_type = key_type.lower()
+    if key_type not in ("rsa", "ed25519"):
+        raise ValueError(f"key_type must be 'rsa' or 'ed25519', got {key_type!r}")
+    if path is None:
+        path = "~/.ssh/id_ed25519" if key_type == "ed25519" else "~/.ssh/id_rsa"
 
     priv = Path(os.path.expanduser(path))
     pub = _pub_path(path)
@@ -187,9 +299,7 @@ def generate_key(
         return priv, pub
     priv.parent.mkdir(parents=True, exist_ok=True)
 
-    key = paramiko.RSAKey.generate(bits)
-    key.write_private_key_file(str(priv))
-    pub.write_text(f"ssh-rsa {key.get_base64()} {comment or ''}".strip() + "\n")
+    pub.write_text(_make_keypair(priv, key_type, bits, comment) + "\n")
     for p, mode in ((priv, 0o600), (pub, 0o644)):
         try:
             os.chmod(p, mode)
@@ -197,7 +307,7 @@ def generate_key(
             pass  # Windows without POSIX perms; OpenSSH there enforces via ACLs
     if show:
         print(
-            f"created SSH key: {priv} (private) and {pub} (public)\n\n"
+            f"created {key_type} SSH key: {priv} (private) and {pub} (public)\n\n"
             "Add the PUBLIC key below to your HPC - via its key-upload page, or by\n"
             "appending it to ~/.ssh/authorized_keys on a login node. nb2slurm can't\n"
             "do this step for you (clusters usually disable password login):\n\n"

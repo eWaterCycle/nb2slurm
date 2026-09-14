@@ -98,9 +98,13 @@ Workflow(..., mounts=[
 Collect these (usually from your HPC's docs or support desk):
 
 1. **An account** on the cluster and your **username**.
-2. **SSH access** — ideally an SSH key (so nb2slurm can connect without a password
-   prompt). Your cluster's docs explain how to upload your public key. (nb2slurm has a function to create a sshkey)
-3. The **login hostname** (e.g. `spider.surfsara.nl`).
+2. **SSH access** — an SSH key. nb2slurm can make one for you with
+   `nb2slurm.generate_key(key_type="ed25519")`; it prints the **public** half,
+   which you register with your cluster (its key-upload page / portal, or by
+   appending it to `~/.ssh/authorized_keys` on a login node — your cluster's docs
+   explain where). If your key has a passphrase, run `ssh-add` on it once so
+   nb2slurm *and* file sync connect without prompts.
+3. The **login hostname** (e.g. `spider.surf.nl`).
 4. A **project directory** on the cluster to hold your notebooks (`remote_dir`). (Optional, but nice to have)
 5. Which **partition** (queue) to use, if any, and sensible resource limits.
 6. How to reach your **data** (rclone remote names / mountpoints), if needed.
@@ -114,10 +118,10 @@ from nb2slurm import Workflow, Environment, SSHConfig
 
 username = "me"
 
-cfg = SSHConfig(host="spider.surfsara.nl", user=username,
-                remote_dir=f"/home/{username}/myproject", 
-                # key_filename="~/.ssh/id_ed25519"  # optional for specialized use
-                )
+cfg = SSHConfig(host="spider.surf.nl", user=username,
+                remote_dir=f"/home/{username}/myproject",
+                key_filename="~/.ssh/id_ed25519")
+cfg.test_connection()            # quick OK/FAIL check before anything else
 
 env = Environment(name="myenv", kernel="myenv", conda_packages=["xarray"])
 wf  = Workflow(name="myproject", notebooks=[...], kernel="myenv",

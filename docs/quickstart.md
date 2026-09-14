@@ -85,6 +85,17 @@ wf.pull(ssh=cfg)        # output/ and done/ only — never your notebooks
 See [Moving files](transfer.md). Finished subjects are recorded in `done.csv`, so
 re-submitting the whole set only runs what is missing.
 
+That ledger tracks *inputs*, not logic: if you change what a notebook actually
+does, finished subjects won't rerun on their own. Clear the ledger to force them
+to:
+
+```python
+wf.reset_done(ssh=cfg)   # delete done.csv; the next submit() reruns everything
+```
+
+To rerun only part of the set, pass an explicit `items=` list to `submit()`
+instead.
+
 ## Where the jobs come from
 
 `submit()` with no arguments reads `jobs.json`, a nested file that defines both

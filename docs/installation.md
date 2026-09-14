@@ -14,14 +14,18 @@ On your **own machine** (laptop, or a Jupyter server):
 
 - nb2slurm and Jupyter, to run your workflow for one subject and drive the cluster.
 - `rsync`, used by {meth}`~nb2slurm.Workflow.push` and
-  {meth}`~nb2slurm.Workflow.pull`. On Windows use WSL, Git Bash or conda's `rsync`.
+  {meth}`~nb2slurm.Workflow.pull`. On Windows use WSL, Git Bash or conda's
+  `rsync` — [the WSL notebook](FOR_WINDOWS_USERS.ipynb) installs one for you.
 - SSH access to the cluster — a key is easiest:
 
   ```python
   import nb2slurm
-  nb2slurm.generate_key("~/.ssh/id_rsa")   # only once, if you have no key yet
-  print(nb2slurm.public_key("~/.ssh/id_rsa"))  # paste this into your HPC account
+  nb2slurm.generate_key(key_type="ed25519")          # only once, if you have no key yet
+  print(nb2slurm.public_key("~/.ssh/id_ed25519"))    # paste this into your HPC account
   ```
+
+  See [Connecting to the cluster](ssh.md) for registering the key, passphrases
+  and `test_connection()`.
 
 On the **cluster**:
 

@@ -96,6 +96,7 @@ Full documentation: **<https://nb2slurm.readthedocs.io>**
 | [The notebook contract](https://nb2slurm.readthedocs.io/en/latest/notebook-contract.html) | the two rules your notebooks must follow |
 | [jobs.json](https://nb2slurm.readthedocs.io/en/latest/jobs-json.html) | the job grid and the output tree |
 | [Environments and kernels](https://nb2slurm.readthedocs.io/en/latest/environments.html) | build one on the cluster, or use what is there |
+| [Connecting to the cluster](https://nb2slurm.readthedocs.io/en/latest/ssh.html) | SSH keys, passphrases, `test_connection()` |
 | [Generated files](https://nb2slurm.readthedocs.io/en/latest/generated-files.html) | what `build()` writes, and why |
 | [Control notebooks](https://nb2slurm.readthedocs.io/en/latest/control-notebooks.html) | the four-notebook control surface |
 | [Monte Carlo π example](https://nb2slurm.readthedocs.io/en/latest/examples.html) | a complete, runnable workflow |

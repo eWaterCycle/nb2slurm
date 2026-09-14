@@ -35,6 +35,7 @@ project (its hardcoded `cci.py` + `run_cci.slurm` + `submit_*.sh`).
 installation
 quickstart
 hpc-for-beginners
+FOR_WINDOWS_USERS
 ```
 
 ```{toctree}
@@ -45,6 +46,7 @@ notebook-contract
 jobs-json
 environments
 generated-files
+ssh
 transfer
 control-notebooks
 ```
