@@ -38,12 +38,19 @@ class SSHConfig:
     generated scripts live in; commands are run from there.
     """
 
+    #: login node hostname
     host: str
+    #: your username on the cluster
     user: str
+    #: the project directory on the cluster; commands run from there
     remote_dir: str
+    #: SSH port
     port: int = 22
+    #: private key path, e.g. ``~/.ssh/id_rsa`` (``~`` is expanded for you)
     key_filename: Optional[str] = None
+    #: password, if your cluster needs one (never written to disk by save_config)
     password: Optional[str] = None
+    #: extra keyword arguments passed straight to ``paramiko.SSHClient.connect``
     extra_connect_kwargs: dict = field(default_factory=dict)
 
     def key_path(self) -> Optional[str]:

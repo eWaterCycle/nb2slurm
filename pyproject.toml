@@ -35,9 +35,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+docs = [
+    "sphinx>=7.2",
+    "myst-nb>=1.1",
+    "furo>=2024.1.29",
+    "sphinx-copybutton>=0.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/eWaterCycle/nb2slurm"
+Documentation = "https://nb2slurm.readthedocs.io"
 
 [tool.hatch.version]
 path = "src/nb2slurm/__init__.py"

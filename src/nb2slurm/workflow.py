@@ -41,37 +41,50 @@ Item = Union[Any, Sequence[Any], Mapping[str, Any]]
 
 @dataclass
 class Workflow:
+    """A notebook chain plus the resources and cluster details it needs.
+
+    The docstring comments below are the constructor arguments; only ``name``,
+    ``notebooks``, ``kernel`` and ``varying`` are required.
+    """
+
+    #: project name, used for the SLURM job names
     name: str
+    #: the notebook chain, in order; the first one writes ``settings.json``
     notebooks: list[str]
+    #: Jupyter kernel the notebooks are executed with (must exist on the cluster)
     kernel: str
+    #: what changes per job, in the order the levels of ``jobs.json`` nest
     varying: list[str]
+    #: ``#SBATCH`` resources, e.g. ``dict(nodes=1, cpus=2, time="04:00:00")``
     resources: dict = field(
         default_factory=lambda: {"nodes": 1, "cpus": 1, "time": "01:00:00"}
     )
+    #: project root that everything else is relative to
     project_dir: str = "."
+    #: conda env activated in the job (defaults to ``environment.name`` if given)
     conda_env: Optional[str] = None
-    setup: list[str] = field(
-        default_factory=list
-    )  # raw shell lines run before the job, e.g. `module load Python/3.11`
+    #: raw shell lines run before the job, e.g. ``module load Python/3.11``
+    setup: list[str] = field(default_factory=list)
+    #: optional rclone mounts, ``[{"remote": ..., "mountpoint": ...}]``
     mounts: list[dict] = field(default_factory=list)
+    #: filename of the generated papermill driver
     runner_name: str = "run_workflow.py"
+    #: max jobs running at once per submit (``0`` = no limit)
     concurrency: int = 0
-    output_dir: str = (
-        "output"  # root for per-subject outputs (relative to project root)
-    )
-    done_csv: str = "done/done.csv"  # idempotency ledger (relative to project root)
-    jobs_json: str = (
-        "jobs.json"  # nested JSON describing the jobs to run (one leaf path = one job)
-    )
-    environment: Optional[Environment] = None  # primary conda env + kernel to run in
-    kernels: dict = field(
-        default_factory=dict
-    )  # per-notebook kernel overrides {notebook_path: kernel}
-    extra_environments: list[Environment] = field(
-        default_factory=list
-    )  # extra envs to also create
+    #: root for per-subject outputs (relative to project root)
+    output_dir: str = "output"
+    #: idempotency ledger (relative to project root)
+    done_csv: str = "done/done.csv"
+    #: nested JSON describing the jobs to run (one leaf path = one job)
+    jobs_json: str = "jobs.json"
+    #: primary conda env + kernel to run in
+    environment: Optional[Environment] = None
+    #: per-notebook kernel overrides, ``{notebook_path: kernel}``
+    kernels: dict = field(default_factory=dict)
+    #: extra envs to also create
+    extra_environments: list[Environment] = field(default_factory=list)
 
-    # job ids we have submitted this session (used by status/cancel)
+    #: job ids we have submitted this session (used by status/cancel)
     submitted_jobs: list[str] = field(default_factory=list, repr=False)
 
     def __post_init__(self):

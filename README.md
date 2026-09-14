@@ -1,39 +1,42 @@
 # nb2slurm
 
-**STILL IN DEVELOPMENT**
-*For now it nothing is guaranteed, the example monte carlo works, but cleanup is needed*
+[![Documentation](https://readthedocs.org/projects/nb2slurm/badge/?version=latest)](https://nb2slurm.readthedocs.io/en/latest/)
+[![Lint](https://github.com/eWaterCycle/nb2slurm/actions/workflows/lint.yml/badge.svg)](https://github.com/eWaterCycle/nb2slurm/actions/workflows/lint.yml)
+[![PyPI](https://img.shields.io/pypi/v/nb2slurm.svg)](https://pypi.org/project/nb2slurm/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-nb2slurm seamlessly makes your notebook workflow ready for SLURM upscaling.
+Take a notebook workflow that runs for **one subject** — one catchment, one
+region, one number — and run it for **many subjects** on a SLURM cluster, driven
+entirely from a notebook. No command line, no rewriting your science into a
+pipeline DSL.
 
-It takes a notebook workflow that runs for **one subject** (one catchment, one
-region, one number...) and generates everything needed to run it for **many
-subjects** on a SLURM HPC — driven entirely from a notebook, no command line.
+> **Status: alpha.** The Monte Carlo example works end to end, but the API can
+> still change between versions. Pin what you install.
 
-This is the reusable generalisation of the eWaterCycle
-[CCI-analysis-seamless](https://github.com/eWaterCycle/CCI-analysis-seamless)
-project (its hardcoded `cci.py` + `run_cci.slurm` + `submit_*.sh`).
+## The problem
 
-## What it is
+Scaling a notebook study to a cluster usually means abandoning notebooks: someone
+hand-writes a `run_*.slurm`, a `submit_*.sh` and a driver script, then keeps them
+in sync with the notebooks by hand. The scripts drift, the notebooks stop being
+runnable on a laptop, and the whole thing is one person's private knowledge.
 
-nb2slurm is **a package and a scaffolder**:
-
-- **Package (logic):** the importable `nb2slurm` — the `Workflow` class plus
-  helpers for settings, done-tracking, and an SSH transport.
-- **Scaffolder (templates):** bundled Jinja2 templates that `Workflow.build()`
-  renders into a concrete `scripts/` directory for your project.
-
-The project *starter* (notebooks + a control notebook) is intended to live in a
-separate template repository that you clone and fill in; it imports this package.
+nb2slurm generates those files instead. Your notebooks stay ordinary notebooks —
+the same ones you open in Jupyter are the ones SLURM executes, with
+[papermill](https://papermill.readthedocs.io) injecting a different subject per
+job.
 
 ## Install
 
 ```bash
-pip install nb2slurm
+pip install --pre nb2slurm
 ```
 
-Dependencies: `papermill`, `filelock`, `jinja2`, `paramiko`.
+Python 3.9+. `--pre` is needed while only pre-releases are published. You also
+need `rsync` locally for the file transfer helpers, and SSH access to a cluster.
+See [Installation](https://nb2slurm.readthedocs.io/en/latest/installation.html)
+for the cluster-side requirements.
 
-## Usage — all from a notebook
+## Example
 
 ```python
 import nb2slurm
@@ -41,273 +44,85 @@ import nb2slurm
 wf = nb2slurm.Workflow(
     name="myproject",
     notebooks=[
-        "notebooks/0_settings.ipynb",   # first notebook writes settings.json
-        "notebooks/1_computations.ipynb",   # all other notebooks read settings.json
+        "notebooks/0_settings.ipynb",       # writes settings.json
+        "notebooks/1_computations.ipynb",   # reads settings.json
     ],
-    kernel="myenv",                     # allow for setting up an environment on HPC via a Python notebook
-    varying=["region_id", "country"],   # what changes per job
+    kernel="myenv",                         # a Jupyter kernel on the cluster
+    varying=["country", "region"],          # what changes per job
+    jobs_json="jobs.json",                  # the jobs, and the output tree
     resources=dict(nodes=1, cpus=2, time="04:00:00"),
-    conda_env="myenv",                  # activated in the SLURM job
-    mounts=[                            # optional rclone mounts
-        {"remote": "dcache:/climate-data/caravan", "mountpoint": "/scratch/caravan"},
-    ],
-    concurrency=3,                      # max jobs running at once per submit
-    # output_dir="output",            # where per-subject outputs go (root-relative by default)
-    # done_csv="done/done.csv",       # idempotency ledger (root-relative by default)
+    conda_env="myenv",
+    concurrency=3,
 )
 
-wf.build()                              # render scripts/ into the project
-
-# prove it works on one subject locally first:
-#   python scripts/run_workflow.py NL north_1
+wf.build()                                  # render scripts/ into the project
 
 cfg = nb2slurm.SSHConfig(host="spider.surfsara.nl", user="me",
-                         remote_dir="/home/me/myproject", 
-                         # key_filename="~/.ssh/id_ed25519"  # optional
-                         )
+                         remote_dir="/home/me/myproject")
 
-wf.check(ssh=cfg)                                     # preflight: ready to submit?
-wf.submit([("NL", "north_1"), ("DE", "north_2")], ssh=cfg)   # sbatch one job per subject
-wf.status(ssh=cfg)                                     # parsed squeue
-wf.cancel(ssh=cfg)                                     # scancel what we submitted
+wf.push(ssh=cfg)        # upload source — never output/
+wf.check(ssh=cfg)       # preflight: dir, notebooks, scripts, env, kernel
+wf.submit(ssh=cfg)      # one SLURM job per job in jobs.json
+wf.status(ssh=cfg)      # parsed squeue
+wf.pull(ssh=cfg)        # download results — never your notebooks
 ```
 
-## Creating the conda environment + kernel
+Every method works without `ssh=` too, running locally instead — that is the path
+when you drive this from a login or Jupyter node on the cluster itself, and
+`dry_run=True` prints the exact `rsync`/`sbatch` commands without running them.
 
-The SLURM job does `conda activate <env>` and papermill needs a registered
-Jupyter kernel — both must exist on the cluster first. nb2slurm can build them for
-you so you never touch conda or the command line:
+## How it works
 
-```python
-import nb2slurm
+- **A package and a scaffolder.** The importable `nb2slurm` holds the logic;
+  bundled Jinja2 templates are rendered by `build()` into a concrete `scripts/`
+  directory you can read, review and commit.
+- **`jobs.json` defines the jobs *and* the output tree.** Each root-to-leaf path
+  in the nested JSON is one SLURM job and one output directory, so the job list
+  and the folder layout cannot drift apart.
+- **Transfers are one-directional by design.** `push` never uploads `output/`,
+  `pull` never fetches `notebooks/`. Neither direction can destroy the other
+  side's work.
+- **Re-running is cheap.** Finished subjects are recorded in `done.csv`, so
+  re-submitting the whole set only runs what is missing.
 
-user = "me"
-cfg = nb2slurm.SSHConfig(host="spider.surfsara.nl", user=user,
-                         remote_dir=f"/home/{user}/myproject")
+## Documentation
 
-env = nb2slurm.Environment(
-    name="myenv",
-    kernel="myenv",                       # must match Workflow(kernel=...)
-    conda_packages=["xarray", "numpy"],
-    pip_packages=["nb2slurm", "ewatercycle"],
-)
+Full documentation: **<https://nb2slurm.readthedocs.io>**
 
-wf = nb2slurm.Workflow(name="myproject", notebooks=[...], kernel="myenv",
-                       varying=["region_id"], environment=env)
+| | |
+|---|---|
+| [Quickstart](https://nb2slurm.readthedocs.io/en/latest/quickstart.html) | the whole cycle in five steps |
+| [HPC for notebook users](https://nb2slurm.readthedocs.io/en/latest/hpc-for-beginners.html) | plain-language primer if SLURM and conda are new |
+| [The notebook contract](https://nb2slurm.readthedocs.io/en/latest/notebook-contract.html) | the two rules your notebooks must follow |
+| [jobs.json](https://nb2slurm.readthedocs.io/en/latest/jobs-json.html) | the job grid and the output tree |
+| [Environments and kernels](https://nb2slurm.readthedocs.io/en/latest/environments.html) | build one on the cluster, or use what is there |
+| [Generated files](https://nb2slurm.readthedocs.io/en/latest/generated-files.html) | what `build()` writes, and why |
+| [Control notebooks](https://nb2slurm.readthedocs.io/en/latest/control-notebooks.html) | the four-notebook control surface |
+| [Monte Carlo π example](https://nb2slurm.readthedocs.io/en/latest/examples.html) | a complete, runnable workflow |
+| [API reference](https://nb2slurm.readthedocs.io/en/latest/api.html) | every public class and function |
 
-wf.create_environment(ssh=cfg)   # one-time: env + kernel on the HPC (writes environment.yml)
+Converting an existing local-only workflow? `docs/setup_notebooks.ipynb` walks
+through the in-notebook changes with before/after snippets.
+
+## Development
+
+```bash
+git clone https://github.com/eWaterCycle/nb2slurm
+cd nb2slurm
+pip install -e ".[dev,docs]"
+
+pytest
+ruff check . && ruff format --check .
+sphinx-build -b html docs docs/_build/html
 ```
 
-Passing `environment=env` to `Workflow` keeps the names in sync (it errors if
-`kernel`/`conda_env` disagree) and makes `build()` also write `environment.yml`.
-`create_environment()` uses `mamba` when available, falls back to `conda`, and
-registers the kernel via `ipykernel`. Omit `ssh=` to build the env locally instead.
+Ruff runs in CI on every pull request. Issues and pull requests are welcome.
 
-### Using a cluster's existing environment (no env creation)
+## About
 
-`environment` is **optional**. Many clusters already provide Python via a module
-system or a shared environment. In that case skip `Environment` entirely and
-either point at an existing conda env or run setup commands yourself:
+nb2slurm is the reusable generalisation of the eWaterCycle
+[CCI-analysis-seamless](https://github.com/eWaterCycle/CCI-analysis-seamless)
+project — its hardcoded `cci.py`, `run_cci.slurm` and `submit_*.sh`, turned into
+something any notebook workflow can use.
 
-```python
-# existing conda env on the cluster
-wf = nb2slurm.Workflow(..., kernel="hydro_kernel", conda_env="hydro")
-
-# module-based cluster (no conda): raw shell lines run before the job
-wf = nb2slurm.Workflow(..., kernel="hydro_kernel",
-                       setup=["module load 2023", "source /opt/envs/hydro/bin/activate"])
-```
-
-`setup` lines are emitted at the top of the SLURM script (before mounts and the
-runner). With no `environment`/`conda_env`, no `conda activate` is generated —
-the job just uses whatever Python your `setup` puts on the `PATH`. The only hard
-requirement is that `kernel` names a Jupyter kernel that exists on the cluster.
-
-### Different environments for different notebooks
-
-Most notebooks share one kernel, but a few may need another (e.g. a calibration
-step). Set per-notebook overrides with `kernels` (everything not listed uses the
-default `kernel`), and list any extra environments to create with
-`extra_environments`:
-
-```python
-env1 = nb2slurm.Environment(name="myenv1", kernel="myenv1", conda_packages=["xarray"])
-env2 = nb2slurm.Environment(name="myenv2", kernel="myenv2", pip_packages=["sceua"])
-
-wf = nb2slurm.Workflow(
-    name="proj", notebooks=nbs, kernel="myenv1", varying=["region"],
-    environment=env1,                                 # default for most notebooks
-    kernels={"notebooks/step_8.ipynb": "myenv2"},     # this one runs under myenv2
-    extra_environments=[env2],                        # so myenv2 is created too
-)
-
-wf.create_environment(ssh=cfg)   # builds BOTH envs + registers BOTH kernels
-```
-
-The runner picks `kernels.get(notebook, kernel)` per notebook. Drop
-`extra_environments` if `myenv2` already exists on the cluster (or is a provided
-module) — then you only need the `kernels` mapping.
-
-New to HPC/SLURM/conda? See **[docs/hpc-for-beginners.md](docs/hpc-for-beginners.md)**
-for a plain-language primer (no Linux required).
-
-`submit` also accepts `dry_run=True` to print the exact `sbatch` commands without
-running them, and works without `ssh=` (local `subprocess`) when run on a cluster
-login/Jupyter node.
-
-`check(ssh=cfg)` is an optional preflight: it verifies that `remote_dir`, your
-notebooks, the built `scripts/`, the conda env and the Jupyter kernel all exist,
-printing an `OK`/`FAIL` line per check and raising on the first failure (pass
-`raise_on_error=False` to get the full report back as a list instead). Run it once
-before your first submit to turn a cryptic SLURM failure into a clear message.
-
-## What `build()` generates
-
-Into `<project>/scripts/`:
-
-| file | role |
-|------|------|
-| `run_workflow.py` | papermill driver: skip-if-done → run nb 0 (makes `settings.json`) → run the rest → mark done |
-| `job.slurm` | `#SBATCH` resources, conda activate, rclone mounts, then runs the driver |
-| `submit_batch.sh` | CLI fallback: submit every job at once (simple, no concurrency — easy to read) |
-| `submit_jobs.sh` | CLI fallback: same, but throttles how many run concurrently |
-| `cancel_jobs.sh` | CLI fallback: cancel jobs by name |
-| `jobs.txt` | flat one-job-per-line list generated from `jobs.json` (what the bash scripts read) |
-| `structure.json` | the resolved config used to render everything |
-
-The notebook (`wf.submit(...)`) is the primary path; the bash scripts are a
-fallback for when you're SSH'd into the cluster. They never parse JSON — nb2slurm
-flattens `jobs.json` into `jobs.txt` for them, so they stay short and readable.
-
-## The contract your notebooks follow
-
-- The **first** notebook has a papermill `parameters` cell; nb2slurm injects the
-  `varying` values plus `outdir`. It should call `nb2slurm.Settings.write(outdir, {...})`.
-  This cell is given the tag: 'parameters'.
-- Every **later** notebook has a `parameters` cell with `settings_path`, and then starts
-  with `settings = nb2slurm.Settings.load(settings_path)`.
-
-This keeps per-run details in one place (`settings.json`) and means only the first
-notebook is parameterised with your varying variables. 
-The others still use the parameter tag for the JSON file path.
-
-For paths that genuinely differ between your laptop and the cluster (shared data
-dirs, etc.), branch on `nb2slurm.on_hpc()` — it detects a batch run via the SLURM
-environment (and an `NB2SLURM` sentinel), so it works for any user, unlike
-grepping `Path.home()`:
-
-```python
-import nb2slurm
-data_dir = "/project/ewater/Data" if nb2slurm.on_hpc() else "/data/shared"
-```
-
-**Converting an existing local-only workflow?** See
-[`docs/setup_notebooks.ipynb`](docs/setup_notebooks.ipynb) — a step-by-step guide
-(with before/after snippets) covering the seven in-notebook changes that make your
-notebooks run both locally and on SLURM.
-
-## jobs.json — one file defines the jobs *and* the output tree
-
-Instead of a flat subject list, the jobs to run live in a nested JSON file. Each
-root-to-leaf path is one SLURM job, and the levels line up with `varying`. The
-output directory mirrors that hierarchy, so the job list and the folder tree can
-never drift apart.
-
-```json
-{
-    "Netherlands":  {"north": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
-                    "south": ["green_climate", "climate_as_we_are", "heavy_industrialization"]
-                     },
-    "Germany":      {"north": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
-                     "south": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
-                     "east": ["green_climate", "climate_as_we_are", "heavy_industrialization"],
-                     "west": ["green_climate", "climate_as_we_are", "heavy_industrialization"]
-                    }
-}
-```
-
-With `varying=["country", "region", "scenario"]` this means:
-
-```
-jobs:  (Netherlands,north,green_climate)  (Netherlands,south,climate_as_we_are)  (Germany,north,heavy_industrialization)
-dirs:  output/Netherlands/north/green_climate output/Netherlands/south/climate_as_we_are  output/Germany/north/heavy_industrialization
-```
-
-**Format rules** (so you can generate the file however you like — a literal dict,
-a comprehension, from a CSV, ...):
-
-- a **dict** nests one more level (its keys are the values of the next `varying` dimension);
-- a **list** at the bottom means several jobs sharing the same parent path;
-- **`null`** / `[]` / `{}` ends the path there (a job/leaf with no deeper level).
-
-It's just JSON, so build it any way that suits you and write it to `jobs.json`.
-For example, in Python:
-
-```python
-import json
-countries = {"NL": ["north", "south"], "DE": ["north"]}
-scenarios = ["green", "normal", "worse"]
-jobs = {c: {r: scenarios for r in regions} for c, regions in countries.items()}
-json.dump(jobs, open("jobs.json", "w"), indent=2)
-```
-
-`submit()` reads this file by default (no arguments needed):
-
-```python
-wf = nb2slurm.Workflow(..., varying=["country","region","scenario"], jobs_json="jobs.json")
-
-wf.build_outputs()                  # optional: pre-create the whole output/... tree from the JSON
-wf.submit(ssh=cfg)                  # reads jobs.json, one job per leaf path
-wf.submit([("NL","123","ssp126")], ssh=cfg)   # override: run an explicit subset instead
-wf.submit(ssh=cfg, jobs_json="rerun.json")    # override: use a different file
-```
-
-Because each job's output dir is built from the JSON, your first notebook never
-builds folders — it just receives `outdir` and writes `settings.json`. The
-underlying parser is exposed as `nb2slurm.Structure` if you want it directly
-(`Structure.from_json(path).jobs()` / `.build(base)`).
-
-## Moving files: push source up, pull results down
-
-nb2slurm wraps `rsync` (so you need `rsync` available locally) with two
-deliberately one-directional helpers:
-
-```python
-wf.push(ssh=cfg)   # local project  -> cluster:  notebooks/, scripts/, jobs.json, ...
-wf.pull(ssh=cfg)   # cluster results -> local:    output/ and done/ only
-```
-
-The split is the safety mechanism:
-
-- **`push` never uploads `output/`/`done/`** — re-uploading your latest notebook
-  edits can't wipe results already produced on the cluster.
-- **`pull` never fetches `notebooks/`/`scripts/`/`jobs.json`** — syncing results
-  back can't overwrite a notebook you changed locally while jobs were running.
-
-So the normal loop after editing a notebook is: `push` the change, submit again
-(finished work is skipped via `done.csv`), then `pull` results when ready.
-
-## Control notebooks
-
-For real use the control surface is split into four notebooks (see
-`docs/control/`):
-
-| notebook | does |
-|----------|------|
-| `0_config.ipynb` | guided settings; saves `control_config.json` + `jobs.json` |
-| `1_build.ipynb` | `wf.build()` → `wf.push()` → `wf.create_environment()` → `wf.check()` |
-| `2_submit.ipynb` | `wf.submit()` / `wf.status()` / `wf.cancel()` |
-| `3_sync.ipynb` | `wf.pull()` — results only, never your notebooks |
-
-You only edit `0_config.ipynb`. It builds the objects from your settings and
-saves them with `nb2slurm.save_config(...)`; the other three start with
-`wf, cfg = nb2slurm.load_config("control_config.json")`, so they always share one
-source of truth and never duplicate settings.
-
-`docs/walkthrough.ipynb` is the single-notebook narrative overview of the whole
-flow; the four above are the practical, modular version.
-
-## Example Monte Carlo
-
-We also provide a [monte carlo example](docs/example_monte_carlo_pi/monte_carlo2slurm.ipynb).
-This serves as a basic example of what nb2slurm can do and provide a all-in-one notebook to run nb2slurm.
+Licensed under [Apache-2.0](LICENSE).

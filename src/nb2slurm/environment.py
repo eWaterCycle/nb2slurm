@@ -29,11 +29,19 @@ from .ssh import CommandResult, SSHConfig, run_shell
 
 @dataclass
 class Environment:
+    """A conda environment + Jupyter kernel to create for the workflow."""
+
+    #: conda environment name (``conda activate <name>`` in the job)
     name: str
+    #: Jupyter kernel to register; must match ``Workflow(kernel=...)``
     kernel: str
+    #: Python version for the environment
     python: str = "3.11"
+    #: conda channels, in priority order
     channels: list[str] = field(default_factory=lambda: ["conda-forge"])
+    #: packages installed with conda/mamba
     conda_packages: list[str] = field(default_factory=list)
+    #: packages installed with pip (nb2slurm itself is needed in the job)
     pip_packages: list[str] = field(default_factory=lambda: ["nb2slurm"])
 
     def to_yaml(self) -> str:
